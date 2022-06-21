@@ -26,7 +26,7 @@
     <meta name="description" content="InfoSec&#x2F;CTFer&#x2F;Code Audit">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Ho1aAs&#39;s Blog">
-<meta property="og:url" content="http://holaasuka.github.io/tags/Java%E5%AE%89%E5%85%A8/index.html">
+<meta property="og:url" content="http://holaasuka.github.io/page/2/index.html">
 <meta property="og:site_name" content="Ho1aAs&#39;s Blog">
 <meta property="og:description" content="InfoSec&#x2F;CTFer&#x2F;Code Audit">
 <meta property="og:locale" content="zh_CN">
@@ -34,14 +34,14 @@
 <meta name="twitter:card" content="summary">
 
 
-<link rel="canonical" href="http://holaasuka.github.io/tags/Java%E5%AE%89%E5%85%A8/">
+<link rel="canonical" href="http://holaasuka.github.io/page/2/">
 
 
 
-<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":false,"lang":"zh-CN","comments":"","permalink":"","path":"tags/Java安全/index.html","title":""}</script>
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":true,"isPost":false,"lang":"zh-CN","comments":"","permalink":"","path":"page/2/index.html","title":""}</script>
 
 <script class="next-config" data-name="calendar" type="application/json">""</script>
-<title>标签: Java安全 | Ho1aAs's Blog</title>
+<title>Ho1aAs's Blog</title>
   
 
 
@@ -71,7 +71,7 @@
 
     <a href="/" class="brand" rel="start">
       <i class="logo-line"></i>
-      <p class="site-title">Ho1aAs's Blog</p>
+      <h1 class="site-title">Ho1aAs's Blog</h1>
       <i class="logo-line"></i>
     </a>
       <p class="site-subtitle" itemprop="description">Tutte le strada portano a roma.</p>
@@ -200,190 +200,122 @@
 </noscript>
 
 
-    <div class="main-inner tag posts-collapse">
+    <div class="main-inner index posts-expand">
+
+    
 
 
+<div class="post-block">
   
   
-  
-  <div class="post-block">
-    <div class="post-content">
-      <div class="collection-title">
-        <h1 class="collection-header">Java安全
-          <small>标签</small>
-        </h1>
-      </div>
 
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="http://holaasuka.github.io/2022/05/27/CTF/hfctf2022-ezchain/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/tk1-1.jpg">
+      <meta itemprop="name" content="Ho1aAs">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Ho1aAs's Blog">
+      <meta itemprop="description" content="InfoSec/CTFer/Code Audit">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | Ho1aAs's Blog">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2022/05/27/CTF/hfctf2022-ezchain/" class="post-title-link" itemprop="url">hfctf2022-ezchain</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-05-27 23:37:27" itemprop="dateCreated datePublished" datetime="2022-05-27T23:37:27+08:00">2022-05-27</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2022-05-30 17:18:22" itemprop="dateModified" datetime="2022-05-30T17:18:22+08:00">2022-05-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/CTF/" itemprop="url" rel="index"><span itemprop="name">CTF</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="本文字数">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">本文字数：</span>
+      <span>6.8k</span>
+    </span>
+    <span class="post-meta-item" title="阅读时长">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">阅读时长 &asymp;</span>
+      <span>12 分钟</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <h2 id="利用点-2">利用点</h2>
+<ol>
+<li class="lvl-3">ROME不出网反序列化</li>
+<li class="lvl-3">ROME二次反序列化</li>
+</ol>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/05/27/CTF/hfctf2022-ezchain/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
       
-    <div class="collection-year">
-      <span class="collection-header">2022</span>
     </div>
 
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-21T17:16:46+08:00"
-              content="2022-06-21">
-          06-21
-        </time>
-      </div>
+    
+    
+    
 
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/SPEL%E8%A1%A8%E8%BE%BE%E5%BC%8F%E6%B3%A8%E5%85%A5%E5%9F%BA%E7%A1%80/" itemprop="url">
-            <span itemprop="name">SPEL表达式注入基础</span>
-          </a>
-      </div>
-
+    <footer class="post-footer">
+        <div class="post-eof"></div>
       
-    </header>
+    </footer>
   </article>
+</div>
 
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-21T16:55:48+08:00"
-              content="2022-06-21">
-          06-21
-        </time>
-      </div>
 
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/21/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E7%B1%BB%E7%9A%84%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%9F%BA%E7%A1%80/" itemprop="url">
-            <span itemprop="name">类的序列化与反序列化基础</span>
-          </a>
-      </div>
 
-      
-    </header>
-  </article>
 
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-20T20:22:51+08:00"
-              content="2022-06-20">
-          06-20
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/20/Java%E5%AE%89%E5%85%A8%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/%E6%B5%85%E6%9E%90%E7%B1%BB%E5%8A%A0%E8%BD%BD%E5%99%A8%E5%8F%8A%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%9C%BA%E5%88%B6/" itemprop="url">
-            <span itemprop="name">浅析类加载器及双亲委派机制</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-20T17:35:20+08:00"
-              content="2022-06-20">
-          06-20
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/" itemprop="url">
-            <span itemprop="name">绕过JDK高版本限制进行JNDI注入</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-05T23:07:00+08:00"
-              content="2022-06-05">
-          06-05
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/" itemprop="url">
-            <span itemprop="name">CVE-2022-22965: Spring4Shell</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-06-02T09:08:16+08:00"
-              content="2022-06-02">
-          06-02
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/" itemprop="url">
-            <span itemprop="name">Springboot whitelabel errorpage SPEL RCE</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-05-30T14:52:02+08:00"
-              content="2022-05-30">
-          05-30
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/05/30/Springboot/CVE-2022-22963/" itemprop="url">
-            <span itemprop="name">CVE-2022-22963: Spring Cloud Function SPEL RCE</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-  <article itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-      <div class="post-meta-container">
-        <time itemprop="dateCreated"
-              datetime="2022-05-29T14:40:16+08:00"
-              content="2022-05-29">
-          05-29
-        </time>
-      </div>
-
-      <div class="post-title">
-          <a class="post-title-link" href="/2022/05/29/JNDI%E6%B3%A8%E5%85%A5/%E4%BD%8E%E7%89%88%E6%9C%ACJNDI%E6%B3%A8%E5%85%A5%E5%8E%9F%E7%90%86%E5%92%8C%E6%89%8B%E6%AE%B5%E6%8E%A2%E7%A9%B6/" itemprop="url">
-            <span itemprop="name">低版本JNDI注入原理和手段探究</span>
-          </a>
-      </div>
-
-      
-    </header>
-  </article>
-
-    </div>
-  </div>
-  
-  
-  
+  <nav class="pagination">
+    <a class="extend prev" rel="prev" href="/"><i class="fa fa-angle-left" aria-label="上一页"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span>
+  </nav>
 
 </div>
   </main>
